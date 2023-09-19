@@ -18,6 +18,7 @@ import (
 	_ "github.com/ava-labs/avalanchego/tests/e2e/faultinjection"
 	_ "github.com/ava-labs/avalanchego/tests/e2e/p"
 	_ "github.com/ava-labs/avalanchego/tests/e2e/static-handlers"
+	"github.com/ava-labs/avalanchego/tests/e2e/vms"
 	_ "github.com/ava-labs/avalanchego/tests/e2e/x"
 	_ "github.com/ava-labs/avalanchego/tests/e2e/x/transfer"
 )
@@ -35,7 +36,11 @@ func init() {
 
 var _ = ginkgo.SynchronizedBeforeSuite(func() []byte {
 	// Run only once in the first ginkgo process
-	return e2e.NewTestEnvironment(flagVars).Marshal()
+	return e2e.NewTestEnvironment(
+		flagVars,
+		vms.XSVMSubnetA,
+		vms.XSVMSubnetB,
+	).Marshal()
 }, func(envBytes []byte) {
 	// Run in every ginkgo process
 
