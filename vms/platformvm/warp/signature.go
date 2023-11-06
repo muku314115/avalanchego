@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
+	"time"
 
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
@@ -74,6 +76,8 @@ func (s *BitSetSignature) Verify(
 	quorumNum uint64,
 	quorumDen uint64,
 ) error {
+	startTime := time.Now()
+
 	if msg.NetworkID != networkID {
 		return ErrWrongNetworkID
 	}
@@ -135,6 +139,8 @@ func (s *BitSetSignature) Verify(
 	if !bls.Verify(aggPubKey, aggSig, unsignedBytes) {
 		return ErrInvalidSignature
 	}
+
+	log.Info("Verify Signature took", time.Since(startTime).Milliseconds(), "milliseconds")
 	return nil
 }
 
