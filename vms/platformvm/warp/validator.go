@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"golang.org/x/exp/maps"
 
@@ -52,6 +53,7 @@ func GetCanonicalValidatorSet(
 	pChainHeight uint64,
 	subnetID ids.ID,
 ) ([]*Validator, uint64, error) {
+	startTime := time.Now()
 	// Get the validator set at the given height.
 	vdrSet, err := pChainState.GetValidatorSet(ctx, pChainHeight, subnetID)
 	if err != nil {
@@ -89,6 +91,7 @@ func GetCanonicalValidatorSet(
 	// Sort validators by public key
 	vdrList := maps.Values(vdrs)
 	utils.Sort(vdrList)
+	fmt.Printf("GetCanonicalValidatorSet returned in %dms\n", time.Since(startTime).Milliseconds())
 	return vdrList, totalWeight, nil
 }
 
