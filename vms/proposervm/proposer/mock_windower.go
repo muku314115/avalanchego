@@ -40,16 +40,16 @@ func (m *MockWindower) EXPECT() *MockWindowerMockRecorder {
 }
 
 // Delay mocks base method.
-func (m *MockWindower) Delay(arg0 context.Context, arg1, arg2 uint64, arg3 ids.NodeID, arg4 int) (time.Duration, error) {
+func (m *MockWindower) Delay(arg0 context.Context, arg1, arg2 uint64, arg3 ids.NodeID) (time.Duration, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delay", arg0, arg1, arg2, arg3, arg4)
+	ret := m.ctrl.Call(m, "Delay", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(time.Duration)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Delay indicates an expected call of Delay.
-func (mr *MockWindowerMockRecorder) Delay(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+func (mr *MockWindowerMockRecorder) Delay(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delay", reflect.TypeOf((*MockWindower)(nil).Delay), arg0, arg1, arg2, arg3, arg4)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delay", reflect.TypeOf((*MockWindower)(nil).Delay), arg0, arg1, arg2, arg3)
 }

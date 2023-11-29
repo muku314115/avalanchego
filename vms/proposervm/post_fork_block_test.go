@@ -279,7 +279,7 @@ func TestBlockVerify_PostForkBlock_TimestampChecks(t *testing.T) {
 	require.ErrorIs(err, errTimeNotMonotonic)
 
 	// block cannot arrive before its creator window starts
-	blkWinDelay, err := proVM.Delay(context.Background(), childCoreBlk.Height(), pChainHeight, proVM.ctx.NodeID, proposer.MaxVerifyWindows)
+	blkWinDelay, err := proVM.Delay(context.Background(), childCoreBlk.Height(), pChainHeight, proVM.ctx.NodeID)
 	require.NoError(err)
 	beforeWinStart := prntTimestamp.Add(blkWinDelay).Add(-1 * time.Second)
 	proVM.Clock.Set(beforeWinStart)

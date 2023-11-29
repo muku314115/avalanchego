@@ -5,6 +5,8 @@ package proposer
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -26,7 +28,11 @@ const (
 	MaxBuildDelay   = MaxBuildWindows * WindowDuration // 5 minutes
 )
 
-var _ Windower = (*windower)(nil)
+var (
+	_ Windower = (*windower)(nil)
+
+	ErrSlotNotFound = errors.New("proposer slot not found")
+)
 
 type Windower interface {
 	// Delay returns the amount of time that [validatorID] must wait before
@@ -37,7 +43,6 @@ type Windower interface {
 		chainHeight,
 		pChainHeight uint64,
 		validatorID ids.NodeID,
-		maxWindows int,
 	) (time.Duration, error)
 }
 
@@ -60,12 +65,8 @@ func New(state validators.State, subnetID, chainID ids.ID) Windower {
 	}
 }
 
-func (w *windower) Delay(ctx context.Context, chainHeight, pChainHeight uint64, validatorID ids.NodeID, maxWindows int) (time.Duration, error) {
-	if validatorID == ids.EmptyNodeID {
-		return time.Duration(maxWindows) * WindowDuration, nil
-	}
-
-	proposers, err := w.proposers(ctx, chainHeight, pChainHeight, maxWindows)
+func (w *windower) Delay(ctx context.Context, chainHeight, pChainHeight uint64, validatorID ids.NodeID) (time.Duration, error) {
+	proposers, err := w.proposers(ctx, chainHeight, pChainHeight)
 	if err != nil {
 		return 0, err
 	}
@@ -77,14 +78,14 @@ func (w *windower) Delay(ctx context.Context, chainHeight, pChainHeight uint64, 
 		}
 		delay += WindowDuration
 	}
-	return delay, nil
+	return delay, fmt.Errorf("%w, nodeID %v", ErrSlotNotFound, validatorID)
 }
 
 // proposers returns the proposer list for building a block at [chainHeight]
 // when the validator set is defined at [pChainHeight]. The list is returned
 // in order. The minimum delay of a validator is the index they appear times
 // [WindowDuration].
-func (w *windower) proposers(ctx context.Context, chainHeight, pChainHeight uint64, maxWindows int) ([]ids.NodeID, error) {
+func (w *windower) proposers(ctx context.Context, chainHeight, pChainHeight uint64) ([]ids.NodeID, error) {
 	// get the validator set by the p-chain height
 	validatorsMap, err := w.state.GetValidatorSet(ctx, pChainHeight, w.subnetID)
 	if err != nil {
@@ -121,7 +122,7 @@ func (w *windower) proposers(ctx context.Context, chainHeight, pChainHeight uint
 		return nil, err
 	}
 
-	numToSample := maxWindows
+	numToSample := len(validators)
 	if weight < uint64(numToSample) {
 		numToSample = int(weight)
 	}

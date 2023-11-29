@@ -144,7 +144,7 @@ func (p *postForkCommonComponents) Verify(
 
 		childHeight := child.Height()
 		proposerID := child.Proposer()
-		minDelay, err := p.vm.Windower.Delay(ctx, childHeight, parentPChainHeight, proposerID, proposer.MaxVerifyWindows)
+		minDelay, err := p.vm.Windower.Delay(ctx, childHeight, parentPChainHeight, proposerID)
 		if err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ func (p *postForkCommonComponents) buildChild(
 	if delay < proposer.MaxBuildDelay {
 		parentHeight := p.innerBlk.Height()
 		proposerID := p.vm.ctx.NodeID
-		minDelay, err := p.vm.Windower.Delay(ctx, parentHeight+1, parentPChainHeight, proposerID, proposer.MaxBuildWindows)
+		minDelay, err := p.vm.Windower.Delay(ctx, parentHeight+1, parentPChainHeight, proposerID)
 		if err != nil {
 			p.vm.ctx.Log.Error("unexpected build block failure",
 				zap.String("reason", "failed to calculate required timestamp delay"),
