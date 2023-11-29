@@ -152,11 +152,28 @@ func initTestProposerVM(
 		return defaultPChainHeight, nil
 	}
 	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
-		// we mark ctx.NodeID as the only validator to make sure it will be selected as block proposer
+		var (
+			thisNode = proVM.ctx.NodeID
+			nodeID1  = ids.BuildTestNodeID([]byte{1})
+			nodeID2  = ids.BuildTestNodeID([]byte{2})
+			nodeID3  = ids.BuildTestNodeID([]byte{3})
+		)
 		return map[ids.NodeID]*validators.GetValidatorOutput{
-			proVM.ctx.NodeID: {
-				NodeID: proVM.ctx.NodeID,
+			thisNode: {
+				NodeID: thisNode,
 				Weight: 10,
+			},
+			nodeID1: {
+				NodeID: nodeID1,
+				Weight: 5,
+			},
+			nodeID2: {
+				NodeID: nodeID2,
+				Weight: 6,
+			},
+			nodeID3: {
+				NodeID: nodeID3,
+				Weight: 7,
 			},
 		}, nil
 	}
