@@ -7,25 +7,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils"
-	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/utils/sampler"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
+
+	safemath "github.com/ava-labs/avalanchego/utils/math"
 )
 
-// Proposer list constants
 const (
 	WindowDuration = 5 * time.Second
 
-	MaxVerifyWindows = 6
-	MaxVerifyDelay   = MaxVerifyWindows * WindowDuration // 30 seconds
-
-	MaxBuildWindows = 60
-	MaxBuildDelay   = MaxBuildWindows * WindowDuration // 5 minutes
+	MaxVerifyDelay = time.Duration(math.MaxInt64)
+	MaxBuildDelay  = time.Duration(math.MaxInt64)
 )
 
 var (
@@ -100,7 +98,7 @@ func (w *windower) proposers(ctx context.Context, chainHeight, pChainHeight uint
 			id:     k,
 			weight: v.Weight,
 		})
-		newWeight, err := math.Add64(weight, v.Weight)
+		newWeight, err := safemath.Add64(weight, v.Weight)
 		if err != nil {
 			return nil, err
 		}

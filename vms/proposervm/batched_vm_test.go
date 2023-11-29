@@ -23,7 +23,6 @@ import (
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
-	"github.com/ava-labs/avalanchego/vms/proposervm/proposer"
 )
 
 func TestCoreVMNotRemote(t *testing.T) {
@@ -225,7 +224,7 @@ func TestGetAncestorsPostForkOnly(t *testing.T) {
 	// prepare build of next block
 	require.NoError(builtBlk1.Verify(context.Background()))
 	require.NoError(proRemoteVM.SetPreference(context.Background(), builtBlk1.ID()))
-	proRemoteVM.Set(proRemoteVM.Time().Add(proposer.MaxBuildDelay))
+	proRemoteVM.Set(proRemoteVM.Time().Add(proRemoteVM.minBlkDelay))
 
 	coreBlk2 := &snowman.TestBlock{
 		TestDecidable: choices.TestDecidable{
@@ -235,7 +234,7 @@ func TestGetAncestorsPostForkOnly(t *testing.T) {
 		BytesV:     []byte{2},
 		ParentV:    coreBlk1.ID(),
 		HeightV:    coreBlk1.Height() + 1,
-		TimestampV: coreBlk1.Timestamp().Add(proposer.MaxVerifyDelay),
+		TimestampV: coreBlk1.Timestamp(),
 	}
 	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
 		return coreBlk2, nil
@@ -246,7 +245,7 @@ func TestGetAncestorsPostForkOnly(t *testing.T) {
 	// prepare build of next block
 	require.NoError(builtBlk2.Verify(context.Background()))
 	require.NoError(proRemoteVM.SetPreference(context.Background(), builtBlk2.ID()))
-	proRemoteVM.Set(proRemoteVM.Time().Add(proposer.MaxBuildDelay))
+	proRemoteVM.Set(proRemoteVM.Time().Add(proRemoteVM.minBlkDelay))
 
 	coreBlk3 := &snowman.TestBlock{
 		TestDecidable: choices.TestDecidable{
@@ -431,7 +430,7 @@ func TestGetAncestorsAtSnomanPlusPlusFork(t *testing.T) {
 		BytesV:     []byte{3},
 		ParentV:    coreBlk2.ID(),
 		HeightV:    coreBlk2.Height() + 1,
-		TimestampV: postForkTime.Add(proposer.MaxVerifyDelay),
+		TimestampV: postForkTime,
 	}
 	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
 		return coreBlk3, nil
@@ -443,7 +442,7 @@ func TestGetAncestorsAtSnomanPlusPlusFork(t *testing.T) {
 	// prepare build of next block
 	require.NoError(builtBlk3.Verify(context.Background()))
 	require.NoError(proRemoteVM.SetPreference(context.Background(), builtBlk3.ID()))
-	proRemoteVM.Set(proRemoteVM.Time().Add(proposer.MaxBuildDelay))
+	proRemoteVM.Set(proRemoteVM.Time().Add(proRemoteVM.minBlkDelay))
 
 	coreBlk4 := &snowman.TestBlock{
 		TestDecidable: choices.TestDecidable{
@@ -704,7 +703,7 @@ func TestBatchedParseBlockPostForkOnly(t *testing.T) {
 	// prepare build of next block
 	require.NoError(builtBlk1.Verify(context.Background()))
 	require.NoError(proRemoteVM.SetPreference(context.Background(), builtBlk1.ID()))
-	proRemoteVM.Set(proRemoteVM.Time().Add(proposer.MaxBuildDelay))
+	proRemoteVM.Set(proRemoteVM.Time().Add(proRemoteVM.minBlkDelay))
 
 	coreBlk2 := &snowman.TestBlock{
 		TestDecidable: choices.TestDecidable{
@@ -714,7 +713,7 @@ func TestBatchedParseBlockPostForkOnly(t *testing.T) {
 		BytesV:     []byte{2},
 		ParentV:    coreBlk1.ID(),
 		HeightV:    coreBlk1.Height() + 1,
-		TimestampV: coreBlk1.Timestamp().Add(proposer.MaxVerifyDelay),
+		TimestampV: coreBlk1.Timestamp(),
 	}
 	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
 		return coreBlk2, nil
@@ -725,7 +724,7 @@ func TestBatchedParseBlockPostForkOnly(t *testing.T) {
 	// prepare build of next block
 	require.NoError(builtBlk2.Verify(context.Background()))
 	require.NoError(proRemoteVM.SetPreference(context.Background(), builtBlk2.ID()))
-	proRemoteVM.Set(proRemoteVM.Time().Add(proposer.MaxBuildDelay))
+	proRemoteVM.Set(proRemoteVM.Time().Add(proRemoteVM.minBlkDelay))
 
 	coreBlk3 := &snowman.TestBlock{
 		TestDecidable: choices.TestDecidable{
@@ -867,7 +866,7 @@ func TestBatchedParseBlockAtSnomanPlusPlusFork(t *testing.T) {
 		BytesV:     []byte{3},
 		ParentV:    coreBlk2.ID(),
 		HeightV:    coreBlk2.Height() + 1,
-		TimestampV: postForkTime.Add(proposer.MaxVerifyDelay),
+		TimestampV: postForkTime,
 	}
 	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
 		return coreBlk3, nil
@@ -879,7 +878,7 @@ func TestBatchedParseBlockAtSnomanPlusPlusFork(t *testing.T) {
 	// prepare build of next block
 	require.NoError(builtBlk3.Verify(context.Background()))
 	require.NoError(proRemoteVM.SetPreference(context.Background(), builtBlk3.ID()))
-	proRemoteVM.Set(proRemoteVM.Time().Add(proposer.MaxBuildDelay))
+	proRemoteVM.Set(proRemoteVM.Time().Add(proRemoteVM.minBlkDelay))
 
 	coreBlk4 := &snowman.TestBlock{
 		TestDecidable: choices.TestDecidable{
@@ -1038,28 +1037,11 @@ func initTestRemoteProposerVM(
 		return defaultPChainHeight, nil
 	}
 	valState.GetValidatorSetF = func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
-		var (
-			thisNode = proVM.ctx.NodeID
-			nodeID1  = ids.BuildTestNodeID([]byte{1})
-			nodeID2  = ids.BuildTestNodeID([]byte{2})
-			nodeID3  = ids.BuildTestNodeID([]byte{3})
-		)
+		// we mark ctx.NodeID as the only validator to make sure it will be selected as block proposer
 		return map[ids.NodeID]*validators.GetValidatorOutput{
-			thisNode: {
-				NodeID: thisNode,
+			proVM.ctx.NodeID: {
+				NodeID: proVM.ctx.NodeID,
 				Weight: 10,
-			},
-			nodeID1: {
-				NodeID: nodeID1,
-				Weight: 5,
-			},
-			nodeID2: {
-				NodeID: nodeID2,
-				Weight: 6,
-			},
-			nodeID3: {
-				NodeID: nodeID3,
-				Weight: 7,
 			},
 		}, nil
 	}

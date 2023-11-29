@@ -155,7 +155,7 @@ func (p *postForkCommonComponents) Verify(
 		}
 
 		// Verify the signature of the node
-		shouldHaveProposer := delay < proposer.MaxVerifyDelay
+		shouldHaveProposer := true
 		if err := child.SignedBlock.Verify(shouldHaveProposer, p.vm.ctx.ChainID); err != nil {
 			return err
 		}
@@ -248,25 +248,15 @@ func (p *postForkCommonComponents) buildChild(
 	}
 
 	// Build the child
-	var statelessChild block.SignedBlock
-	if delay >= proposer.MaxVerifyDelay {
-		statelessChild, err = block.BuildUnsigned(
-			parentID,
-			newTimestamp,
-			pChainHeight,
-			innerBlock.Bytes(),
-		)
-	} else {
-		statelessChild, err = block.Build(
-			parentID,
-			newTimestamp,
-			pChainHeight,
-			p.vm.stakingCertLeaf,
-			innerBlock.Bytes(),
-			p.vm.ctx.ChainID,
-			p.vm.stakingLeafSigner,
-		)
-	}
+	statelessChild, err := block.Build(
+		parentID,
+		newTimestamp,
+		pChainHeight,
+		p.vm.stakingCertLeaf,
+		innerBlock.Bytes(),
+		p.vm.ctx.ChainID,
+		p.vm.stakingLeafSigner,
+	)
 	if err != nil {
 		p.vm.ctx.Log.Error("unexpected build block failure",
 			zap.String("reason", "failed to generate proposervm block header"),
