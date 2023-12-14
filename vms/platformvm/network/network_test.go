@@ -30,6 +30,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
+	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
 const (
@@ -403,13 +404,7 @@ func TestNetworkInboundTxPushGossip(t *testing.T) {
 		prometheus.NewRegistry(),
 	)
 
-	utx := &txs.RewardValidatorTx{
-		TxID: ids.GenerateTestID(),
-	}
-
-	pk, err := secp256k1.NewPrivateKey()
-	require.NoError(err)
-	tx, err := txs.NewSigned(utx, txs.Codec, [][]*secp256k1.PrivateKey{{pk}})
+	tx, err := testTx(1)
 	require.NoError(err)
 
 	txBytes, err := tx.Marshal()
@@ -468,13 +463,7 @@ func TestNetworkOutboundTxPushGossip(t *testing.T) {
 		prometheus.NewRegistry(),
 	)
 
-	utx := &txs.RewardValidatorTx{
-		TxID: ids.GenerateTestID(),
-	}
-
-	pk, err := secp256k1.NewPrivateKey()
-	require.NoError(err)
-	tx, err := txs.NewSigned(utx, txs.Codec, [][]*secp256k1.PrivateKey{{pk}})
+	tx, err := testTx(1)
 	require.NoError(err)
 
 	mockVerifier.EXPECT().VerifyTx(tx).Return(nil)
@@ -541,16 +530,10 @@ func TestNetworkMakesOutboundPullGossipRequests(t *testing.T) {
 	)
 	require.NoError(network.Connected(ctx, snowCtx.NodeID, nil))
 
-	utx1 := &txs.RewardValidatorTx{
-		TxID: ids.GenerateTestID(),
-	}
-
-	pk, err := secp256k1.NewPrivateKey()
+	tx1, err := testTx(1)
 	require.NoError(err)
-	tx1, err := txs.NewSigned(utx1, txs.Codec, [][]*secp256k1.PrivateKey{{pk}})
-	require.NoError(err)
-
 	require.NoError(network.mempool.Add(tx1))
+
 	go network.Gossip(ctx)
 
 	pullGossipRequestBytes := <-sender.SentAppRequest
@@ -565,4 +548,194 @@ func TestNetworkMakesOutboundPullGossipRequests(t *testing.T) {
 		Salt:  ids.ID(pullGossipRequest.Salt),
 	}
 	require.True(gossipBloomFilter.Has(tx1))
+}
+
+func TestNetworkServesInboundPullGossipRequest(t *testing.T) {
+	require := require.New(t)
+	ctrl := gomock.NewController(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	snowCtx := snow.DefaultContextTest()
+
+	// only validators can request gossip
+	nodeID := ids.GenerateTestNodeID()
+	snowCtx.ValidatorState = &validators.TestState{
+		GetCurrentHeightF: func(context.Context) (uint64, error) {
+			return 0, nil
+		},
+		GetValidatorSetF: func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+			return map[ids.NodeID]*validators.GetValidatorOutput{
+				nodeID: nil,
+			}, nil
+		},
+	}
+
+	mockVerifier := executor.NewMockManager(ctrl)
+	mockVerifier.EXPECT().VerifyTx(gomock.Any()).Return(nil).Times(2)
+
+	metrics := prometheus.NewRegistry()
+	mempool, err := mempool.New("", metrics, nil)
+	require.NoError(err)
+
+	sender := &common.FakeSender{
+		SentAppResponse: make(chan []byte, 1),
+	}
+	network, err := New(
+		snowCtx,
+		mockVerifier,
+		mempool,
+		false,
+		sender,
+		txGossipThrottlingPeriod,
+		txGossipThrottlingLimit,
+		txGossipBloomMaxItems,
+		txGossipFalsePositiveRate,
+		txGossipMaxFalsePositiveRate,
+		metrics,
+	)
+	require.NoError(network.Connected(ctx, nodeID, nil))
+
+	require.NoError(err)
+
+	tx1, err := testTx(1)
+	require.NoError(err)
+
+	tx2, err := testTx(2)
+	require.NoError(err)
+
+	// I know about tx1 and tx2
+	require.NoError(network.mempool.Add(tx1))
+	require.NoError(network.mempool.Add(tx2))
+
+	// the requester only knows about tx1
+	bloom, err := gossip.NewBloomFilter(txGossipBloomMaxItems, txGossipFalsePositiveRate)
+	require.NoError(err)
+	bloom.Add(tx1)
+
+	bloomBytes, err := bloom.Bloom.MarshalBinary()
+	require.NoError(err)
+	pullGossipRequest := &sdk.PullGossipRequest{
+		Filter: bloomBytes,
+		Salt:   bloom.Salt[:],
+	}
+	pullGossipRequestBytes, err := proto.Marshal(pullGossipRequest)
+	require.NoError(err)
+
+	inboundMsgBytes := append(binary.AppendUvarint(nil, txGossipHandlerID), pullGossipRequestBytes...)
+	require.NoError(network.AppRequest(ctx, nodeID, 1, time.Time{}, inboundMsgBytes))
+
+	pullGossipResponseBytes := <-sender.SentAppResponse
+	pullGossipResponse := &sdk.PullGossipResponse{}
+	require.NoError(proto.Unmarshal(pullGossipResponseBytes, pullGossipResponse))
+	require.Len(pullGossipResponse.Gossip, 1)
+
+	gotTx := &txs.Tx{}
+	require.NoError(gotTx.Unmarshal(pullGossipResponse.Gossip[0]))
+	require.Equal(tx2.ID(), gotTx.ID())
+}
+
+func TestNetworkHandlesPullGossipResponse(t *testing.T) {
+	require := require.New(t)
+	ctrl := gomock.NewController(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	snowCtx := snow.DefaultContextTest()
+	snowCtx.ValidatorState = &validators.TestState{
+		GetCurrentHeightF: func(context.Context) (uint64, error) {
+			return 0, nil
+		},
+		GetValidatorSetF: func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+			return map[ids.NodeID]*validators.GetValidatorOutput{
+				snowCtx.NodeID: nil,
+			}, nil
+		},
+	}
+
+	mockVerifier := executor.NewMockManager(ctrl)
+	metrics := prometheus.NewRegistry()
+	mempool, err := mempool.New("", metrics, nil)
+	require.NoError(err)
+
+	sender := &common.FakeSender{
+		SentAppRequest: make(chan []byte, txGossipPollSize),
+	}
+	network, err := New(
+		snowCtx,
+		mockVerifier,
+		mempool,
+		false,
+		sender,
+		txGossipThrottlingPeriod,
+		txGossipThrottlingLimit,
+		txGossipBloomMaxItems,
+		txGossipFalsePositiveRate,
+		txGossipMaxFalsePositiveRate,
+		metrics,
+	)
+	require.NoError(err)
+	require.NoError(network.Connected(ctx, snowCtx.NodeID, nil))
+
+	go network.Gossip(ctx)
+
+	tx1, err := testTx(1)
+	require.NoError(err)
+
+	<-sender.SentAppRequest
+
+	pullGossipResponse := &sdk.PullGossipResponse{
+		Gossip: [][]byte{tx1.Bytes()},
+	}
+	pullGossipResponseBytes, err := proto.Marshal(pullGossipResponse)
+	require.NoError(err)
+
+	inboundResponseBytes := append(txGossipHandlerPrefix, pullGossipResponseBytes...)
+	require.NoError(network.AppResponse(ctx, snowCtx.NodeID, 1, inboundResponseBytes))
+	network.mempool.Mempool.Has(tx1.ID())
+}
+
+func testTx(i int) (*txs.Tx, error) {
+	pk, err := secp256k1.NewPrivateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	utx := &txs.CreateChainTx{
+		BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
+			NetworkID:    10,
+			BlockchainID: ids.Empty.Prefix(uint64(i)),
+			Ins: []*avax.TransferableInput{{
+				UTXOID: avax.UTXOID{
+					TxID:        ids.ID{'t', 'x', 'I', 'D'},
+					OutputIndex: uint32(i),
+				},
+				Asset: avax.Asset{ID: ids.ID{'a', 's', 's', 'e', 'r', 't'}},
+				In: &secp256k1fx.TransferInput{
+					Amt:   uint64(5678),
+					Input: secp256k1fx.Input{SigIndices: []uint32{uint32(i)}},
+				},
+			}},
+			Outs: []*avax.TransferableOutput{{
+				Asset: avax.Asset{ID: ids.ID{'a', 's', 's', 'e', 'r', 't'}},
+				Out: &secp256k1fx.TransferOutput{
+					Amt: uint64(1234),
+					OutputOwners: secp256k1fx.OutputOwners{
+						Threshold: 1,
+						Addrs:     []ids.ShortID{pk.Address()},
+					},
+				},
+			}},
+		}},
+		SubnetID:    ids.GenerateTestID(),
+		ChainName:   "chainName",
+		VMID:        ids.GenerateTestID(),
+		FxIDs:       []ids.ID{ids.GenerateTestID()},
+		GenesisData: []byte{'g', 'e', 'n', 'D', 'a', 't', 'a'},
+		SubnetAuth:  &secp256k1fx.Input{SigIndices: []uint32{1}},
+	}
+
+	return txs.NewSigned(utx, txs.Codec, [][]*secp256k1.PrivateKey{{pk}})
 }
