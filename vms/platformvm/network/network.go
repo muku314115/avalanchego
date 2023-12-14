@@ -35,7 +35,7 @@ const (
 	txGossipHandlerID     = 0
 	txGossipMaxGossipSize = 20 * units.KiB
 	txGossipPollSize      = 10
-	txGossipFrequency     = 15 * time.Second
+	txGossipFrequency     = 1 * time.Second
 )
 
 type Network struct {

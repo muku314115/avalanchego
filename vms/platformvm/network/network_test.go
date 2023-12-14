@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	bloomfilter "github.com/holiman/bloomfilter/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -17,9 +18,11 @@ import (
 	"go.uber.org/mock/gomock"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/network/p2p/gossip"
 	"github.com/ava-labs/avalanchego/proto/pb/sdk"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
+	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
@@ -492,4 +495,74 @@ func TestNetworkOutboundTxPushGossip(t *testing.T) {
 	gossipTx := &txs.Tx{}
 	require.NoError(gossipTx.Unmarshal(gossipMsg.Gossip[0]))
 	require.Equal(tx.ID(), gossipTx.ID())
+}
+
+func TestNetworkMakesOutboundPullGossipRequests(t *testing.T) {
+	require := require.New(t)
+	ctrl := gomock.NewController(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	snowCtx := snow.DefaultContextTest()
+	snowCtx.NodeID = ids.GenerateTestNodeID()
+	// we must be a validator to request gossip
+	snowCtx.ValidatorState = &validators.TestState{
+		GetCurrentHeightF: func(context.Context) (uint64, error) {
+			return 0, nil
+		},
+		GetValidatorSetF: func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+			return map[ids.NodeID]*validators.GetValidatorOutput{
+				snowCtx.NodeID: nil,
+			}, nil
+		},
+	}
+
+	mockVerifier := executor.NewMockManager(ctrl)
+	mockVerifier.EXPECT().VerifyTx(gomock.Any()).Return(nil)
+	mockMempool := mempool.NewMockMempool(ctrl)
+	mockMempool.EXPECT().Add(gomock.Any()).Return(nil)
+
+	sender := &common.FakeSender{
+		SentAppRequest: make(chan []byte, 1),
+	}
+	network, err := New(
+		snowCtx,
+		mockVerifier,
+		mockMempool,
+		false,
+		sender,
+		txGossipThrottlingPeriod,
+		txGossipThrottlingLimit,
+		txGossipBloomMaxItems,
+		txGossipFalsePositiveRate,
+		txGossipMaxFalsePositiveRate,
+		prometheus.NewRegistry(),
+	)
+	require.NoError(network.Connected(ctx, snowCtx.NodeID, nil))
+
+	utx1 := &txs.RewardValidatorTx{
+		TxID: ids.GenerateTestID(),
+	}
+
+	pk, err := secp256k1.NewPrivateKey()
+	require.NoError(err)
+	tx1, err := txs.NewSigned(utx1, txs.Codec, [][]*secp256k1.PrivateKey{{pk}})
+	require.NoError(err)
+
+	require.NoError(network.mempool.Add(tx1))
+	go network.Gossip(ctx)
+
+	pullGossipRequestBytes := <-sender.SentAppRequest
+	pullGossipRequest := &sdk.PullGossipRequest{}
+	require.Equal(byte(txGossipHandlerID), pullGossipRequestBytes[0])
+	require.NoError(proto.Unmarshal(pullGossipRequestBytes[1:], pullGossipRequest))
+
+	bloomFilter := &bloomfilter.Filter{}
+	require.NoError(bloomFilter.UnmarshalBinary(pullGossipRequest.Filter))
+	gossipBloomFilter := &gossip.BloomFilter{
+		Bloom: bloomFilter,
+		Salt:  ids.ID(pullGossipRequest.Salt),
+	}
+	require.True(gossipBloomFilter.Has(tx1))
 }
