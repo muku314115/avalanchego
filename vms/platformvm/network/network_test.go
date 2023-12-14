@@ -41,12 +41,7 @@ const (
 	txGossipMaxFalsePositiveRate = 0.5
 )
 
-var (
-	errTest               = errors.New("test error")
-	errFailedVerification = errors.New("failed verification")
-
-	txGossipHandlerPrefix = binary.AppendUvarint(nil, txGossipHandlerID)
-)
+var errTest = errors.New("test error")
 
 func TestNetworkAppGossip(t *testing.T) {
 	testTx := &txs.Tx{
@@ -403,6 +398,7 @@ func TestNetworkInboundTxPushGossip(t *testing.T) {
 		txGossipMaxFalsePositiveRate,
 		prometheus.NewRegistry(),
 	)
+	require.NoError(err)
 
 	tx, err := testTx(1)
 	require.NoError(err)
@@ -415,7 +411,7 @@ func TestNetworkInboundTxPushGossip(t *testing.T) {
 	}
 	inboundGossipBytes, err := proto.Marshal(inboundGossip)
 	require.NoError(err)
-	inboundMsgBytes := append(txGossipHandlerPrefix, inboundGossipBytes...)
+	inboundMsgBytes := append([]byte{txGossipHandlerID}, inboundGossipBytes...)
 
 	mockVerifier.EXPECT().VerifyTx(gomock.Any()).Return(nil)
 	mockMempool.EXPECT().Add(gomock.Any()).Return(nil)
@@ -462,6 +458,7 @@ func TestNetworkOutboundTxPushGossip(t *testing.T) {
 		txGossipMaxFalsePositiveRate,
 		prometheus.NewRegistry(),
 	)
+	require.NoError(err)
 
 	tx, err := testTx(1)
 	require.NoError(err)
@@ -528,6 +525,7 @@ func TestNetworkMakesOutboundPullGossipRequests(t *testing.T) {
 		txGossipMaxFalsePositiveRate,
 		prometheus.NewRegistry(),
 	)
+	require.NoError(err)
 	require.NoError(network.Connected(ctx, snowCtx.NodeID, nil))
 
 	tx1, err := testTx(1)
@@ -692,7 +690,7 @@ func TestNetworkHandlesPullGossipResponse(t *testing.T) {
 	pullGossipResponseBytes, err := proto.Marshal(pullGossipResponse)
 	require.NoError(err)
 
-	inboundResponseBytes := append(txGossipHandlerPrefix, pullGossipResponseBytes...)
+	inboundResponseBytes := append([]byte{txGossipHandlerID}, pullGossipResponseBytes...)
 	require.NoError(network.AppResponse(ctx, snowCtx.NodeID, 1, inboundResponseBytes))
 	network.mempool.Mempool.Has(tx1.ID())
 }
