@@ -80,6 +80,22 @@ func (mr *MockMempoolMockRecorder) GetDropReason(arg0 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDropReason", reflect.TypeOf((*MockMempool)(nil).GetDropReason), arg0)
 }
 
+// GetFilter mocks base method.
+func (m *MockMempool) GetFilter() ([]byte, []byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFilter")
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].([]byte)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetFilter indicates an expected call of GetFilter.
+func (mr *MockMempoolMockRecorder) GetFilter() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFilter", reflect.TypeOf((*MockMempool)(nil).GetFilter))
+}
+
 // Has mocks base method.
 func (m *MockMempool) Has(arg0 ids.ID) bool {
 	m.ctrl.T.Helper()
@@ -92,6 +108,18 @@ func (m *MockMempool) Has(arg0 ids.ID) bool {
 func (mr *MockMempoolMockRecorder) Has(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*MockMempool)(nil).Has), arg0)
+}
+
+// Iterate mocks base method.
+func (m *MockMempool) Iterate(arg0 func(*txs.Tx) bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Iterate", arg0)
+}
+
+// Iterate indicates an expected call of Iterate.
+func (mr *MockMempoolMockRecorder) Iterate(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Iterate", reflect.TypeOf((*MockMempool)(nil).Iterate), arg0)
 }
 
 // MarkDropped mocks base method.

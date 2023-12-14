@@ -98,7 +98,7 @@ type environment struct {
 	Builder
 	blkManager blockexecutor.Manager
 	mempool    mempool.Mempool
-	network    network.Network
+	network    *network.Network // TODO remove
 	sender     *common.SenderTest
 
 	isBootstrapped *utils.Atomic[bool]
@@ -164,7 +164,12 @@ func newEnvironment(t *testing.T) *environment {
 	}
 
 	registerer := prometheus.NewRegistry()
-	res.sender = &common.SenderTest{T: t}
+	res.sender = &common.SenderTest{
+		T: t,
+		SendAppGossipF: func(context.Context, []byte) error {
+			return nil
+		},
+	}
 
 	metrics, err := metrics.New("", registerer)
 	require.NoError(err)
@@ -180,13 +185,20 @@ func newEnvironment(t *testing.T) *environment {
 		pvalidators.TestManager,
 	)
 
-	res.network = network.New(
+	res.network, err = network.New(
 		res.backend.Ctx,
 		res.blkManager,
 		res.mempool,
 		res.backend.Config.PartialSyncPrimaryNetwork,
 		res.sender,
+		time.Second,
+		100,
+		10,
+		0.1,
+		0.5,
+		registerer,
 	)
+	require.NoError(err)
 
 	res.Builder = New(
 		res.mempool,

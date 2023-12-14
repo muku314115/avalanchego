@@ -64,6 +64,9 @@ type Mempool interface {
 	// possibly reissued.
 	MarkDropped(txID ids.ID, reason error)
 	GetDropReason(txID ids.ID) error
+
+	// Iterate iterates over the txs until f returns false
+	Iterate(f func(tx *txs.Tx) bool)
 }
 
 // Transactions from clients that have not yet been put into blocks and added to
@@ -119,6 +122,15 @@ func New(
 		consumedUTXOs: set.NewSet[ids.ID](initialConsumedUTXOsSize),
 		toEngine:      toEngine,
 	}, nil
+}
+
+func (m *mempool) Iterate(f func(tx *txs.Tx) bool) {
+	itr := m.unissuedTxs.NewIterator()
+	for itr.Next() {
+		if !f(itr.Value()) {
+			return
+		}
+	}
 }
 
 func (m *mempool) Add(tx *txs.Tx) error {

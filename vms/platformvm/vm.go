@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/rpc/v2"
 
@@ -52,6 +53,14 @@ import (
 	pvalidators "github.com/ava-labs/avalanchego/vms/platformvm/validators"
 )
 
+const (
+	txGossipBloomMaxItems             = 8 * 1024
+	txGossipBloomFalsePositiveRate    = 0.01
+	txGossipBloomMaxFalsePositiveRate = 0.05
+	txGossipThrottlingPeriod          = 10 * time.Second
+	txGossipThrottlingLimit           = 2
+)
+
 var (
 	_ snowmanblock.ChainVM       = (*VM)(nil)
 	_ secp256k1fx.VM             = (*VM)(nil)
@@ -62,7 +71,7 @@ var (
 type VM struct {
 	config.Config
 	blockbuilder.Builder
-	network.Network
+	*network.Network
 	validators.State
 
 	metrics            metrics.Metrics
@@ -90,12 +99,13 @@ type VM struct {
 
 	// TODO: Remove after v1.11.x is activated
 	pruned utils.Atomic[bool]
+	cancel context.CancelFunc
 }
 
 // Initialize this blockchain.
 // [vm.ChainManager] and [vm.vdrMgr] must be set before this function is called.
 func (vm *VM) Initialize(
-	ctx context.Context,
+	rootCtx context.Context,
 	chainCtx *snow.Context,
 	db database.Database,
 	genesisBytes []byte,
@@ -105,6 +115,9 @@ func (vm *VM) Initialize(
 	_ []*common.Fx,
 	appSender common.AppSender,
 ) error {
+	ctx, cancel := context.WithCancel(rootCtx)
+	vm.cancel = cancel
+
 	chainCtx.Log.Verbo("initializing platform chain")
 
 	execConfig, err := config.GetExecutionConfig(configBytes)
@@ -189,13 +202,25 @@ func (vm *VM) Initialize(
 		txExecutorBackend,
 		validatorManager,
 	)
-	vm.Network = network.New(
+
+	vm.Network, err = network.New(
 		txExecutorBackend.Ctx,
 		vm.manager,
 		mempool,
 		txExecutorBackend.Config.PartialSyncPrimaryNetwork,
 		appSender,
+		txGossipThrottlingPeriod,
+		txGossipThrottlingLimit,
+		txGossipBloomMaxItems,
+		txGossipBloomFalsePositiveRate,
+		txGossipBloomMaxFalsePositiveRate,
+		registerer,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize network: %w", err)
+	}
+	go vm.Network.Gossip(ctx)
+
 	vm.Builder = blockbuilder.New(
 		mempool,
 		vm.txBuilder,
@@ -347,6 +372,8 @@ func (vm *VM) SetState(_ context.Context, state snow.State) error {
 
 // Shutdown this blockchain
 func (vm *VM) Shutdown(context.Context) error {
+	vm.cancel()
+
 	if vm.db == nil {
 		return nil
 	}
