@@ -449,7 +449,7 @@ func TestNetworkOutboundTxPushGossip(t *testing.T) {
 	mockMempool := mempool.NewMockMempool(ctrl)
 
 	sender := &common.FakeSender{
-		SentAppGossip: make(chan []byte, 1),
+		SentAppGossip: make(chan []byte, 2),
 	}
 	network, err := New(
 		snowCtx,
@@ -474,29 +474,22 @@ func TestNetworkOutboundTxPushGossip(t *testing.T) {
 	tx, err := txs.NewSigned(utx, txs.Codec, [][]*secp256k1.PrivateKey{{pk}})
 	require.NoError(err)
 
-	txBytes, err := tx.Marshal()
-	require.NoError(err)
-
-	inboundGossip := &sdk.PushGossip{
-		Gossip: [][]byte{txBytes},
-	}
-	inboundGossipBytes, err := proto.Marshal(inboundGossip)
-	require.NoError(err)
-	inboundMsgBytes := append(txGossipHandlerPrefix, inboundGossipBytes...)
-
 	mockVerifier.EXPECT().VerifyTx(tx).Return(nil)
+	mockMempool.EXPECT().Has(tx.ID()).Return(false)
 	mockMempool.EXPECT().Add(tx).Return(nil)
+	mockMempool.EXPECT().RequestBuildBlock(gomock.Any())
 
-	require.NoError(network.AppGossip(ctx, ids.EmptyNodeID, inboundMsgBytes))
+	require.NoError(network.IssueTx(ctx, tx))
 
-	forwardedMsgBytes := <-sender.SentAppGossip
-	forwardedMsg := &sdk.PushGossip{}
+	<-sender.SentAppGossip // legacy outbound gossip message
+	gossipMsgBytes := <-sender.SentAppGossip
+	gossipMsg := &sdk.PushGossip{}
 
-	require.Equal(byte(txGossipHandlerID), forwardedMsgBytes[0])
-	require.NoError(proto.Unmarshal(forwardedMsgBytes[1:], forwardedMsg))
-	require.Len(forwardedMsg.Gossip, 1)
+	require.Equal(byte(txGossipHandlerID), gossipMsgBytes[0])
+	require.NoError(proto.Unmarshal(gossipMsgBytes[1:], gossipMsg))
+	require.Len(gossipMsg.Gossip, 1)
 
-	forwardedTx := &txs.Tx{}
-	require.NoError(forwardedTx.Unmarshal(forwardedMsg.Gossip[0]))
-	require.Equal(tx.ID(), forwardedTx.ID())
+	gossipTx := &txs.Tx{}
+	require.NoError(gossipTx.Unmarshal(gossipMsg.Gossip[0]))
+	require.Equal(tx.ID(), gossipTx.ID())
 }
