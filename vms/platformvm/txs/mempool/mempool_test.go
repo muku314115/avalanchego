@@ -249,5 +249,3 @@ func TestPeekTxs(t *testing.T) {
 	require.False(exists)
 	require.Nil(tx)
 }
-
-//TODO test iteration

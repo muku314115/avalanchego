@@ -18,25 +18,15 @@ import (
 	"github.com/ava-labs/avalanchego/network/p2p/gossip"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
-	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/vms/components/message"
 	blockexecutor "github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
 )
 
-const (
-	// We allow [recentCacheSize] to be fairly large because we only store hashes
-	// in the cache, not entire transactions.
-	recentCacheSize = 512
-
-	maxValidatorSetStaleness = time.Minute
-
-	txGossipHandlerID     = 0
-	txGossipMaxGossipSize = 20 * units.KiB
-	txGossipPollSize      = 10
-	txGossipFrequency     = 1 * time.Second
-)
+// We allow [recentCacheSize] to be fairly large because we only store hashes
+// in the cache, not entire transactions.
+const recentCacheSize = 512
 
 type Network struct {
 	*p2p.Network

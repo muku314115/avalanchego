@@ -1,3 +1,6 @@
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
 package network
 
 import (
@@ -8,9 +11,18 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/network/p2p/gossip"
+	"github.com/ava-labs/avalanchego/utils/units"
 	blockexecutor "github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
+)
+
+const (
+	maxValidatorSetStaleness = time.Minute
+	txGossipHandlerID        = 0
+	txGossipMaxGossipSize    = 20 * units.KiB
+	txGossipPollSize         = 10
+	txGossipFrequency        = 15 * time.Second
 )
 
 var (
