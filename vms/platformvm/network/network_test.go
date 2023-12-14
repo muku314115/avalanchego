@@ -513,7 +513,7 @@ func TestNetworkMakesOutboundPullGossipRequests(t *testing.T) {
 	mockMempool.EXPECT().Add(gomock.Any()).Return(nil)
 
 	sender := &common.FakeSender{
-		SentAppRequest: make(chan []byte, 1),
+		SentAppRequest: make(chan []byte, txGossipPollSize),
 	}
 	network, err := New(
 		snowCtx,
