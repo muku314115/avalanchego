@@ -7,10 +7,12 @@ import (
 	"context"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 
 	"github.com/ava-labs/avalanchego/cache"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/vms/avm/block/executor"
@@ -19,23 +21,19 @@ import (
 	"github.com/ava-labs/avalanchego/vms/components/message"
 )
 
-// We allow [recentTxsCacheSize] to be fairly large because we only store hashes
-// in the cache, not entire transactions.
-const recentTxsCacheSize = 512
+const (
+	// We allow [recentTxsCacheSize] to be fairly large because we only store hashes
+	// in the cache, not entire transactions.
+	recentTxsCacheSize = 512
 
-var _ Network = (*network)(nil)
+	txGossipHandlerID = 0
+)
 
-type Network interface {
-	common.AppHandler
+var (
+	_ common.AppHandler = (*Network)(nil)
+)
 
-	// IssueTx verifies the transaction at the currently preferred state, adds
-	// it to the mempool, and gossips it to the network.
-	//
-	// Invariant: Assumes the context lock is held.
-	IssueTx(context.Context, *txs.Tx) error
-}
-
-type network struct {
+type Network struct {
 	// We embed a noop handler for all unhandled messages
 	common.AppHandler
 
@@ -56,8 +54,14 @@ func New(
 	manager executor.Manager,
 	mempool mempool.Mempool,
 	appSender common.AppSender,
-) Network {
-	return &network{
+	registerer prometheus.Registerer,
+) (Network, error) {
+	p2pNetwork, err := p2p.NewNetwork(ctx.Log, appSender, registerer, "p2p")
+	if err != nil {
+		return nil, err
+	}
+
+	return &Network{
 		AppHandler: common.NewNoOpAppHandler(ctx.Log),
 
 		ctx:       ctx,
@@ -72,7 +76,7 @@ func New(
 	}
 }
 
-func (n *network) AppGossip(ctx context.Context, nodeID ids.NodeID, msgBytes []byte) error {
+func (n *Network) AppGossip(ctx context.Context, nodeID ids.NodeID, msgBytes []byte) error {
 	n.ctx.Log.Debug("called AppGossip message handler",
 		zap.Stringer("nodeID", nodeID),
 		zap.Int("messageLen", len(msgBytes)),
@@ -119,7 +123,7 @@ func (n *network) AppGossip(ctx context.Context, nodeID ids.NodeID, msgBytes []b
 	return nil
 }
 
-func (n *network) IssueTx(ctx context.Context, tx *txs.Tx) error {
+func (n *Network) IssueTx(ctx context.Context, tx *txs.Tx) error {
 	if err := n.issueTx(tx); err != nil {
 		return err
 	}
@@ -139,7 +143,7 @@ func (n *network) IssueTx(ctx context.Context, tx *txs.Tx) error {
 }
 
 // returns nil if the tx is in the mempool
-func (n *network) issueTx(tx *txs.Tx) error {
+func (n *Network) issueTx(tx *txs.Tx) error {
 	txID := tx.ID()
 	if n.mempool.Has(txID) {
 		// The tx is already in the mempool
@@ -179,7 +183,7 @@ func (n *network) issueTx(tx *txs.Tx) error {
 	return nil
 }
 
-func (n *network) gossipTx(ctx context.Context, txID ids.ID, msgBytes []byte) {
+func (n *Network) gossipTx(ctx context.Context, txID ids.ID, msgBytes []byte) {
 	n.recentTxsLock.Lock()
 	_, has := n.recentTxs.Get(txID)
 	n.recentTxs.Put(txID, struct{}{})
