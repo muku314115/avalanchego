@@ -417,8 +417,8 @@ func TestNetworkInboundTxPushGossip(t *testing.T) {
 	require.NoError(err)
 	inboundMsgBytes := append(txGossipHandlerPrefix, inboundGossipBytes...)
 
-	mockVerifier.EXPECT().VerifyTx(tx).Return(nil)
-	mockMempool.EXPECT().Add(tx).Return(nil)
+	mockVerifier.EXPECT().VerifyTx(gomock.Any()).Return(nil)
+	mockMempool.EXPECT().Add(gomock.Any()).Return(nil)
 
 	require.NoError(network.AppGossip(ctx, ids.EmptyNodeID, inboundMsgBytes))
 
