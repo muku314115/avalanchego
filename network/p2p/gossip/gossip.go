@@ -296,11 +296,6 @@ func (p *PushGossiper[T]) Gossip(ctx context.Context) error {
 		msg.Gossip = append(msg.Gossip, bytes)
 		sentBytes += len(bytes)
 		p.pending.PopLeft()
-
-		// limit outbound gossip size
-		if sentBytes > p.maxGossipSize {
-			break
-		}
 	}
 
 	msgBytes, err := proto.Marshal(msg)
