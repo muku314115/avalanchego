@@ -372,7 +372,9 @@ func (vm *VM) SetState(_ context.Context, state snow.State) error {
 
 // Shutdown this blockchain
 func (vm *VM) Shutdown(context.Context) error {
-	vm.cancel()
+	if vm.cancel != nil {
+		vm.cancel()
+	}
 
 	if vm.db == nil {
 		return nil
