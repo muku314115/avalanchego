@@ -320,33 +320,6 @@ func (n *Network) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Restarts all non-ephemeral nodes in the network.
-// TODO(marun) Remove until required for subnet restart
-func (n *Network) Restart(ctx context.Context, w io.Writer) error {
-	if _, err := fmt.Fprintf(w, " restarting network\n"); err != nil {
-		return err
-	}
-	for _, node := range n.Nodes {
-		if node.IsEphemeral {
-			continue
-		}
-
-		if err := node.Stop(ctx); err != nil {
-			return fmt.Errorf("failed to stop node %s: %w", node.NodeID, err)
-		}
-		if err := n.StartNode(ctx, w, node); err != nil {
-			return fmt.Errorf("failed to start node %s: %w", node.NodeID, err)
-		}
-		if _, err := fmt.Fprintf(w, " waiting for node %s to report healthy\n", node.NodeID); err != nil {
-			return err
-		}
-		if err := WaitForHealthy(ctx, node); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Ensures the provided node has the configuration it needs to start. If the data dir is not
 // set, it will be defaulted to [nodeParentDir]/[node ID]. For a not-yet-created network,
 // no action will be taken.
