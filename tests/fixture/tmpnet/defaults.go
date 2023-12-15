@@ -7,9 +7,19 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/config"
+	"github.com/ava-labs/avalanchego/vms/platformvm/txs/executor"
 )
 
 const (
+	// Interval appropriate for network operations that should be
+	// retried periodically but not too often.
+	DefaultPollingInterval = 500 * time.Millisecond
+
+	// Validator start time must be a minimum of SyncBound from the
+	// current time for validator addition to succeed, and adding 20
+	// seconds provides a buffer in case of any delay in processing.
+	DefaultValidatorStartTimeDiff = executor.SyncBound + 20*time.Second
+
 	DefaultNetworkTimeout = 2 * time.Minute
 
 	// Minimum required to ensure connectivity-based health checks will pass

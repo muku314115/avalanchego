@@ -15,7 +15,7 @@ func TestNetworkSerialization(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	network, err := NewDefaultNetwork(&bytes.Buffer{}, "/path/to/avalanche/go", 1)
+	network, err := NewDefaultNetwork(&bytes.Buffer{}, "/path/to/avalanche/go", "", 1)
 	require.NoError(err)
 	require.NoError(network.Create(tmpDir))
 

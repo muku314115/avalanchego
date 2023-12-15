@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ava-labs/avalanchego/config"
@@ -21,6 +22,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/ava-labs/avalanchego/utils/set"
+	"github.com/ava-labs/avalanchego/vms/platformvm"
 )
 
 // The Network type is defined in this file (network.go - orchestration) and
@@ -56,6 +58,9 @@ type Network struct {
 
 	// Nodes that constitute the network
 	Nodes []*Node
+
+	// Subnets that have been enabled on the network
+	Subnets []*Subnet
 }
 
 // Ensure a real and absolute network dir so that node
@@ -70,7 +75,7 @@ func toCanonicalDir(dir string) (string, error) {
 }
 
 // Initializes a new network with default configuration.
-func NewDefaultNetwork(w io.Writer, avalancheGoPath string, nodeCount int) (*Network, error) {
+func NewDefaultNetwork(w io.Writer, avalancheGoPath string, pluginDir string, nodeCount int) (*Network, error) {
 	if _, err := fmt.Fprintf(w, "Preparing configuration for new network with %s\n", avalancheGoPath); err != nil {
 		return nil, err
 	}
@@ -88,6 +93,12 @@ func NewDefaultNetwork(w io.Writer, avalancheGoPath string, nodeCount int) (*Net
 		PreFundedKeys: keys,
 		ChainConfigs:  DefaultChainConfigs(),
 	}
+
+	// Ensure plugin dir is set to support subsequently added subnets.
+	if len(pluginDir) == 0 {
+		pluginDir = os.ExpandEnv("$HOME/.avalanchego/plugins")
+	}
+	network.DefaultFlags[config.PluginDirKey] = pluginDir
 
 	network.Nodes = make([]*Node, nodeCount)
 	for i := range network.Nodes {
@@ -107,6 +118,15 @@ func StopNetwork(ctx context.Context, dir string) error {
 		return err
 	}
 	return network.Stop(ctx)
+}
+
+// Restarts the nodes of the network configured in the provided directory.
+func RestartNetwork(ctx context.Context, w io.Writer, dir string) error {
+	network, err := ReadNetwork(dir)
+	if err != nil {
+		return err
+	}
+	return network.Restart(ctx, w)
 }
 
 // Reads a network from the provided directory.
@@ -232,6 +252,15 @@ func (n *Network) StartNode(ctx context.Context, w io.Writer, node *Node) error 
 		return err
 	}
 
+	// Ensure plugin dir exists or the node will fail to start
+	pluginDir, err := node.Flags.GetStringVal(config.PluginDirKey)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(pluginDir, perms.ReadWriteExecute); err != nil {
+		return fmt.Errorf("failed to create plugin dir at %s: %w", pluginDir, err)
+	}
+
 	bootstrapIPs, bootstrapIDs, err := n.getBootstrapIPsAndIDs(node)
 	if err != nil {
 		return err
@@ -320,6 +349,28 @@ func (n *Network) Stop(ctx context.Context) error {
 	return nil
 }
 
+// Restarts all non-ephemeral nodes in the network.
+func (n *Network) Restart(ctx context.Context, w io.Writer) error {
+	if _, err := fmt.Fprintf(w, " restarting network\n"); err != nil {
+		return err
+	}
+	for _, node := range n.Nodes {
+		if err := node.Stop(ctx); err != nil {
+			return fmt.Errorf("failed to stop node %s: %w", node.NodeID, err)
+		}
+		if err := n.StartNode(ctx, w, node); err != nil {
+			return fmt.Errorf("failed to start node %s: %w", node.NodeID, err)
+		}
+		if _, err := fmt.Fprintf(w, " waiting for node %s to report healthy\n", node.NodeID); err != nil {
+			return err
+		}
+		if err := WaitForHealthy(ctx, node); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Ensures the provided node has the configuration it needs to start. If the data dir is not
 // set, it will be defaulted to [nodeParentDir]/[node ID]. For a not-yet-created network,
 // no action will be taken.
@@ -359,6 +410,110 @@ func (n *Network) EnsureNodeConfig(node *Node) error {
 	if node.RuntimeConfig == nil {
 		node.RuntimeConfig = &NodeRuntimeConfig{
 			AvalancheGoPath: n.DefaultRuntimeConfig.AvalancheGoPath,
+		}
+	}
+
+	// Ensure available subnets are tracked
+	subnetIDs := make([]string, 0, len(n.Subnets))
+	for _, subnet := range n.Subnets {
+		if subnet.SubnetID == ids.Empty {
+			continue
+		}
+		subnetIDs = append(subnetIDs, subnet.SubnetID.String())
+	}
+	subnetIDsValue := ""
+	if len(subnetIDs) > 0 {
+		subnetIDsValue = strings.Join(subnetIDs, ",")
+	}
+	flags[config.TrackSubnetsKey] = subnetIDsValue
+
+	return nil
+}
+
+func (n *Network) GetSubnet(name string) *Subnet {
+	for _, subnet := range n.Subnets {
+		if subnet.Name == name {
+			return subnet
+		}
+	}
+	return nil
+}
+
+// Create each subnet on the network and ensure it is validated by all non-ephemeral nodes in the
+// network.
+func (n *Network) CreateSubnets(ctx context.Context, w io.Writer, subnets []*Subnet) error {
+	createdSubnets := make([]*Subnet, 0, len(subnets))
+	for _, subnet := range subnets {
+		if existingSubnet := n.GetSubnet(subnet.Name); existingSubnet != nil {
+			// The subnet already exists
+			continue
+		}
+
+		if subnet.OwningKey == nil {
+			// Allocate a pre-funded key and remove it from the network so it won't be used for
+			// other purposes
+			if len(n.PreFundedKeys) == 0 {
+				return fmt.Errorf("no pre-funded keys available to create subnet %s", subnet.Name)
+			}
+			subnet.OwningKey = n.PreFundedKeys[len(n.PreFundedKeys)-1]
+			n.PreFundedKeys = n.PreFundedKeys[:len(n.PreFundedKeys)-1]
+		}
+
+		wallet, err := subnet.GetWallet(ctx, n.Nodes[0].URI)
+		if err != nil {
+			return err
+		}
+		pWallet := wallet.P()
+
+		// Create the subnet and its chains on the network
+		if err := subnet.Create(ctx, pWallet); err != nil {
+			return err
+		}
+
+		// Persist the subnet and chain configuration
+		if err := subnet.Write(n.getSubnetDir(), n.getChainConfigDir()); err != nil {
+			return err
+		}
+
+		createdSubnets = append(createdSubnets, subnet)
+	}
+
+	if len(createdSubnets) == 0 {
+		return nil
+	}
+
+	// Ensure the in-memory subnet state
+	n.Subnets = append(n.Subnets, createdSubnets...)
+
+	// Ensure the pre-funded key changes are persisted to disk
+	if err := n.Write(); err != nil {
+		return err
+	}
+
+	// Reconfigure nodes for the new subnets and their chains
+	for _, node := range n.Nodes {
+		if err := n.EnsureNodeConfig(node); err != nil {
+			return err
+		}
+	}
+
+	// Restart nodes to allow new configuration to take effect
+	if err := n.Restart(ctx, w); err != nil {
+		return err
+	}
+
+	// Add each node as a validator
+	for _, subnet := range createdSubnets {
+		if err := subnet.AddValidators(ctx, n.Nodes); err != nil {
+			return err
+		}
+	}
+
+	// Wait for nodes to become validators of the network
+	pChainClient := platformvm.NewClient(n.Nodes[0].URI)
+	for _, subnet := range subnets {
+		if err := waitForActiveValidators(ctx, w, pChainClient, subnet, n.Nodes); err != nil {
+			return err
 		}
 	}
 
