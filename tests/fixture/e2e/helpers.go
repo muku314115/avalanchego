@@ -34,14 +34,14 @@ const (
 	// contention.
 	DefaultTimeout = 2 * time.Minute
 
-	// Interval appropriate for network operations that should be
-	// retried periodically but not too often.
-	DefaultPollingInterval = 500 * time.Millisecond
+	DefaultPollingInterval = tmpnet.DefaultPollingInterval
 
 	// Setting this env will disable post-test bootstrap
 	// checks. Useful for speeding up iteration during test
 	// development.
 	SkipBootstrapChecksEnvName = "E2E_SKIP_BOOTSTRAP_CHECKS"
+
+	DefaultValidatorStartTimeDiff = tmpnet.DefaultValidatorStartTimeDiff
 
 	DefaultGasLimit = uint64(21000) // Standard gas limit
 
@@ -201,10 +201,10 @@ func CheckBootstrapIsPossible(network *tmpnet.Network) {
 }
 
 // Start a temporary network with the provided avalanchego binary.
-func StartNetwork(avalancheGoExecPath string, rootNetworkDir string) *tmpnet.Network {
+func StartNetwork(avalancheGoExecPath string, pluginDir string, rootNetworkDir string) *tmpnet.Network {
 	require := require.New(ginkgo.GinkgoT())
 
-	network, err := tmpnet.NewDefaultNetwork(ginkgo.GinkgoWriter, avalancheGoExecPath, tmpnet.DefaultNodeCount)
+	network, err := tmpnet.NewDefaultNetwork(ginkgo.GinkgoWriter, avalancheGoExecPath, pluginDir, tmpnet.DefaultNodeCount)
 	require.NoError(err)
 	require.NoError(network.Create(rootNetworkDir))
 	require.NoError(network.Start(DefaultContext(), ginkgo.GinkgoWriter))

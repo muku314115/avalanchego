@@ -26,10 +26,12 @@ var (
 )
 
 func main() {
+	var networkDir string
 	rootCmd := &cobra.Command{
 		Use:   "tmpnetctl",
 		Short: "tmpnetctl commands",
 	}
+	rootCmd.PersistentFlags().StringVar(&networkDir, "network-dir", os.Getenv(tmpnet.NetworkDirEnvName), "The path to the configuration directory of a temporary network")
 
 	versionCmd := &cobra.Command{
 		Use:   "version",
@@ -46,21 +48,22 @@ func main() {
 	rootCmd.AddCommand(versionCmd)
 
 	var (
-		rootDir   string
-		execPath  string
-		nodeCount uint8
+		rootDir         string
+		avalancheGoPath string
+		pluginDir       string
+		nodeCount       uint8
 	)
 	startNetworkCmd := &cobra.Command{
 		Use:   "start-network",
 		Short: "Start a new temporary network",
 		RunE: func(*cobra.Command, []string) error {
-			if len(execPath) == 0 {
+			if len(avalancheGoPath) == 0 {
 				return errAvalancheGoRequired
 			}
 
 			// Root dir will be defaulted on start if not provided
 
-			network, err := tmpnet.NewDefaultNetwork(os.Stdout, execPath, int(nodeCount))
+			network, err := tmpnet.NewDefaultNetwork(os.Stdout, avalancheGoPath, pluginDir, int(nodeCount))
 			if err != nil {
 				return err
 			}
@@ -98,11 +101,11 @@ func main() {
 		},
 	}
 	startNetworkCmd.PersistentFlags().StringVar(&rootDir, "root-dir", os.Getenv(tmpnet.RootDirEnvName), "The path to the root directory for temporary networks")
-	startNetworkCmd.PersistentFlags().StringVar(&execPath, "avalanchego-path", os.Getenv(tmpnet.AvalancheGoPathEnvName), "The path to an avalanchego binary")
+	startNetworkCmd.PersistentFlags().StringVar(&avalancheGoPath, "avalanchego-path", os.Getenv(tmpnet.AvalancheGoPathEnvName), "The path to an avalanchego binary")
+	startNetworkCmd.PersistentFlags().StringVar(&pluginDir, "plugin-dir", "", "[optional] the dir containing VM plugins")
 	startNetworkCmd.PersistentFlags().Uint8Var(&nodeCount, "node-count", tmpnet.DefaultNodeCount, "Number of nodes the network should initially consist of")
 	rootCmd.AddCommand(startNetworkCmd)
 
-	var networkDir string
 	stopNetworkCmd := &cobra.Command{
 		Use:   "stop-network",
 		Short: "Stop a temporary network",
@@ -119,8 +122,21 @@ func main() {
 			return nil
 		},
 	}
-	stopNetworkCmd.PersistentFlags().StringVar(&networkDir, "network-dir", os.Getenv(tmpnet.NetworkDirEnvName), "The path to the configuration directory of a temporary network")
 	rootCmd.AddCommand(stopNetworkCmd)
+
+	restartNetworkCmd := &cobra.Command{
+		Use:   "restart-network",
+		Short: "Restart a temporary network",
+		RunE: func(*cobra.Command, []string) error {
+			if len(networkDir) == 0 {
+				return errNetworkDirRequired
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), tmpnet.DefaultNetworkTimeout)
+			defer cancel()
+			return tmpnet.RestartNetwork(ctx, os.Stdout, networkDir)
+		},
+	}
+	rootCmd.AddCommand(restartNetworkCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "tmpnetctl failed: %v\n", err)

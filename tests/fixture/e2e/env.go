@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ava-labs/avalanchego/config"
 	"github.com/ava-labs/avalanchego/tests"
 	"github.com/ava-labs/avalanchego/tests/fixture"
 	"github.com/ava-labs/avalanchego/tests/fixture/tmpnet"
@@ -53,7 +54,7 @@ func (te *TestEnvironment) Marshal() []byte {
 }
 
 // Initialize a new test environment with a shared network (either pre-existing or newly created).
-func NewTestEnvironment(flagVars *FlagVars) *TestEnvironment {
+func NewTestEnvironment(flagVars *FlagVars, subnets ...*tmpnet.Subnet) *TestEnvironment {
 	require := require.New(ginkgo.GinkgoT())
 
 	networkDir := flagVars.NetworkDir()
@@ -66,8 +67,10 @@ func NewTestEnvironment(flagVars *FlagVars) *TestEnvironment {
 		require.NoError(err)
 		tests.Outf("{{yellow}}Using an existing network configured at %s{{/}}\n", network.Dir)
 	} else {
-		network = StartNetwork(flagVars.AvalancheGoExecPath(), DefaultNetworkDir)
+		network = StartNetwork(flagVars.AvalancheGoExecPath(), flagVars.pluginDir, DefaultNetworkDir)
 	}
+
+	require.NoError(network.CreateSubnets(DefaultContext(), ginkgo.GinkgoWriter, subnets))
 
 	uris := network.GetNodeURIs()
 	require.NotEmpty(uris, "network contains no nodes")
@@ -132,5 +135,7 @@ func (te *TestEnvironment) NewPrivateNetwork() *tmpnet.Network {
 	privateNetworksDir := filepath.Join(sharedNetwork.Dir, PrivateNetworksDirName)
 	te.require.NoError(os.MkdirAll(privateNetworksDir, perms.ReadWriteExecute))
 
-	return StartNetwork(sharedNetwork.DefaultRuntimeConfig.AvalancheGoPath, privateNetworksDir)
+	pluginDir, err := sharedNetwork.DefaultFlags.GetStringVal(config.PluginDirKey)
+	te.require.NoError(err)
+	return StartNetwork(sharedNetwork.DefaultRuntimeConfig.AvalancheGoPath, pluginDir, privateNetworksDir)
 }
