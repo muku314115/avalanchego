@@ -22,6 +22,8 @@ import (
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/network/p2p"
+	"github.com/ava-labs/avalanchego/network/p2p/gossip"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/snow/uptime"
@@ -58,6 +60,15 @@ import (
 const (
 	defaultWeight = 10000
 	trackChecksum = false
+
+	maxValidatorSetStaleness     = time.Second
+	txGossipHandlerID            = 0
+	txGossipFrequency            = time.Second
+	txGossipThrottlingPeriod     = time.Second
+	txGossipThrottlingLimit      = 1
+	txGossipBloomMaxItems        = 10
+	txGossipFalsePositiveRate    = 0.1
+	txGossipMaxFalsePositiveRate = 0.5
 )
 
 var (
@@ -185,18 +196,44 @@ func newEnvironment(t *testing.T) *environment {
 		pvalidators.TestManager,
 	)
 
+	verifierMempool, err := network.NewVerifierMempool(
+		res.mempool,
+		res.blkManager,
+		txGossipBloomMaxItems,
+		txGossipFalsePositiveRate,
+		txGossipMaxFalsePositiveRate,
+	)
+
+	p2pNetwork, err := p2p.NewNetwork(
+		res.ctx.Log,
+		res.sender,
+		registerer,
+		"",
+	)
+	require.NoError(err)
+
+	validators := p2p.NewValidators(
+		p2pNetwork.Peers,
+		res.ctx.Log,
+		res.ctx.SubnetID,
+		res.ctx.ValidatorState,
+		maxValidatorSetStaleness,
+	)
+
 	res.network, err = network.New(
 		res.backend.Ctx,
-		res.blkManager,
-		res.mempool,
+		verifierMempool,
 		res.backend.Config.PartialSyncPrimaryNetwork,
 		res.sender,
-		time.Second,
-		100,
-		10,
-		0.1,
-		0.5,
-		registerer,
+		p2pNetwork,
+		validators,
+		gossip.NoOpAccumulator[*txs.Tx]{},
+		gossip.NoOpGossiper{},
+		p2p.NoOpHandler{},
+		txGossipHandlerID,
+		txGossipFrequency,
+		txGossipThrottlingPeriod,
+		txGossipThrottlingLimit,
 	)
 	require.NoError(err)
 

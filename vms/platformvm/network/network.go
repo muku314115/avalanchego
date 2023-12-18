@@ -18,7 +18,6 @@ import (
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/vms/components/message"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
-	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
 )
 
 // We allow [recentCacheSize] to be fairly large because we only store hashes
@@ -26,8 +25,9 @@ import (
 const recentCacheSize = 512
 
 type Mempool interface {
-	mempool.Mempool
 	gossip.Set[*txs.Tx]
+	GetDropReason(txID ids.ID) error
+	RequestBuildBlock(emptyBlockPermitted bool)
 }
 
 type Network struct {
@@ -216,11 +216,6 @@ func (n *Network) issueTx(tx *txs.Tx) error {
 	}
 
 	txID := tx.ID()
-	if n.mempool.Has(txID) {
-		// The tx is already in the mempool
-		return nil
-	}
-
 	if err := n.mempool.Add(tx); err != nil {
 		n.ctx.Log.Debug("tx failed to be added to the mempool",
 			zap.Stringer("txID", txID),
