@@ -11,23 +11,14 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/network/p2p/gossip"
-	"github.com/ava-labs/avalanchego/utils/units"
 	blockexecutor "github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
 )
 
-const (
-	maxValidatorSetStaleness = time.Minute
-	txGossipHandlerID        = 0
-	txGossipMaxGossipSize    = 20 * units.KiB
-	txGossipPollSize         = 10
-	txGossipFrequency        = 15 * time.Second
-)
-
 var (
 	_ p2p.Handler         = (*txGossipHandler)(nil)
-	_ gossip.Set[*txs.Tx] = (*verifierMempool)(nil)
+	_ gossip.Set[*txs.Tx] = (*VerifierMempool)(nil)
 )
 
 // txGossipHandler is the handler called when serving gossip messages
@@ -54,13 +45,13 @@ func (t txGossipHandler) AppRequest(
 	return t.appRequestHandler.AppRequest(ctx, nodeID, deadline, requestBytes)
 }
 
-func newVerifierMempool(
+func NewVerifierMempool(
 	mempool mempool.Mempool,
 	verifier blockexecutor.Manager,
 	bloomMaxItems uint64,
 	bloomFalsePositiveRate float64,
 	bloomMaxFalsePositiveRate float64,
-) (*verifierMempool, error) {
+) (*VerifierMempool, error) {
 	bloomFilter, err := gossip.NewBloomFilter(
 		bloomMaxItems,
 		bloomFalsePositiveRate,
@@ -69,7 +60,7 @@ func newVerifierMempool(
 		return nil, err
 	}
 
-	return &verifierMempool{
+	return &VerifierMempool{
 		Mempool:                   mempool,
 		verifier:                  verifier,
 		bloomFilter:               bloomFilter,
@@ -77,8 +68,8 @@ func newVerifierMempool(
 	}, nil
 }
 
-// verifierMempool performs verification before adding something to the mempool
-type verifierMempool struct {
+// VerifierMempool performs verification before adding something to the mempool
+type VerifierMempool struct {
 	mempool.Mempool
 	verifier blockexecutor.Manager
 
@@ -87,7 +78,7 @@ type verifierMempool struct {
 	bloomMaxFalsePositiveRate float64
 }
 
-func (v *verifierMempool) Add(tx *txs.Tx) error {
+func (v *VerifierMempool) Add(tx *txs.Tx) error {
 	if err := v.verifier.VerifyTx(tx); err != nil {
 		v.Mempool.MarkDropped(tx.ID(), err)
 		return err
@@ -114,7 +105,7 @@ func (v *verifierMempool) Add(tx *txs.Tx) error {
 	return err
 }
 
-func (v *verifierMempool) GetFilter() (bloom []byte, salt []byte, err error) {
+func (v *VerifierMempool) GetFilter() (bloom []byte, salt []byte, err error) {
 	v.lock.RLock()
 	defer v.lock.RUnlock()
 

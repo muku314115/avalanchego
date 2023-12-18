@@ -20,6 +20,8 @@ import (
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/network/p2p"
+	"github.com/ava-labs/avalanchego/network/p2p/gossip"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
@@ -30,6 +32,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/json"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
+	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm/api"
@@ -54,11 +57,16 @@ import (
 )
 
 const (
+	maxValidatorSetStaleness          = time.Minute
+	txGossipHandlerID                 = 0
+	txGossipMaxGossipSize             = 20 * units.KiB
+	txGossipPollSize                  = 10
+	txGossipFrequency                 = 15 * time.Second
+	txGossipThrottlingPeriod          = 10 * time.Second
+	txGossipThrottlingLimit           = 2
 	txGossipBloomMaxItems             = 8 * 1024
 	txGossipBloomFalsePositiveRate    = 0.01
 	txGossipBloomMaxFalsePositiveRate = 0.05
-	txGossipThrottlingPeriod          = 10 * time.Second
-	txGossipThrottlingLimit           = 2
 )
 
 var (
@@ -203,18 +211,81 @@ func (vm *VM) Initialize(
 		validatorManager,
 	)
 
-	vm.Network, err = network.New(
-		txExecutorBackend.Ctx,
-		vm.manager,
-		mempool,
-		txExecutorBackend.Config.PartialSyncPrimaryNetwork,
+	p2pNetwork, err := p2p.NewNetwork(
+		chainCtx.Log,
 		appSender,
-		txGossipThrottlingPeriod,
-		txGossipThrottlingLimit,
+		registerer,
+		"p2p",
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize p2p network: %w", err)
+	}
+
+	validators := p2p.NewValidators(
+		p2pNetwork.Peers,
+		chainCtx.Log,
+		chainCtx.SubnetID,
+		chainCtx.ValidatorState,
+		maxValidatorSetStaleness,
+	)
+
+	txGossipClient := p2pNetwork.NewClient(
+		txGossipHandlerID,
+		p2p.WithValidatorSampling(validators),
+	)
+
+	txGossipMetrics, err := gossip.NewMetrics(registerer, "tx")
+	if err != nil {
+		return fmt.Errorf("failed to initialize gossip metrics: %w", err)
+	}
+
+	txPushGossiper := gossip.NewPushGossiper[*txs.Tx](
+		txGossipClient,
+		txGossipMetrics,
+		txGossipMaxGossipSize,
+	)
+
+	verifierMempool, err := network.NewVerifierMempool(
+		mempool,
+		vm.manager,
 		txGossipBloomMaxItems,
 		txGossipBloomFalsePositiveRate,
 		txGossipBloomMaxFalsePositiveRate,
-		registerer,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize verification mempool: %w", err)
+	}
+
+	txPullGossiper := gossip.NewPullGossiper[txs.Tx, *txs.Tx](
+		chainCtx.Log,
+		verifierMempool,
+		txGossipClient,
+		txGossipMetrics,
+		txGossipPollSize,
+	)
+
+	txGossipHandler := gossip.NewHandler[txs.Tx, *txs.Tx](
+		chainCtx.Log,
+		txPushGossiper,
+		verifierMempool,
+		txGossipMetrics,
+		txGossipMaxGossipSize,
+	)
+
+	vm.Network, err = network.New(
+		chainCtx,
+		verifierMempool,
+		txExecutorBackend.Config.PartialSyncPrimaryNetwork,
+		appSender,
+		p2pNetwork,
+		validators,
+		txPushGossiper,
+		txPullGossiper,
+		txGossipHandler,
+		txGossipHandlerID,
+		txGossipFrequency,
+		txGossipThrottlingPeriod,
+		txGossipThrottlingLimit,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize network: %w", err)
