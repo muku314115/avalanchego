@@ -20,6 +20,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	snowvalidators "github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
@@ -749,7 +750,7 @@ func TestNetworkOutboundTxPullGossip(t *testing.T) {
 				maxValidatorSetStaleness,
 			)
 
-			var called bool
+			called := utils.Atomic[bool]{}
 			network, err := New(
 				snowCtx,
 				mempool,
@@ -760,7 +761,7 @@ func TestNetworkOutboundTxPullGossip(t *testing.T) {
 				gossip.NoOpAccumulator[*txs.Tx]{},
 				&gossip.TestGossiper{
 					GossipF: func(context.Context) error {
-						called = true
+						called.Set(true)
 						return nil
 					},
 				},
@@ -774,7 +775,7 @@ func TestNetworkOutboundTxPullGossip(t *testing.T) {
 			require.NoError(network.Connected(ctx, tt.nodeID, nil))
 
 			go network.Gossip(ctx)
-			require.Eventually(func() bool { return tt.expected == called }, time.Minute, time.Second)
+			require.Eventually(func() bool { return tt.expected == called.Get() }, time.Minute, time.Second)
 		})
 	}
 }
