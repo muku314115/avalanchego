@@ -28,11 +28,7 @@ func TestBlockBuilderMaxMempoolSizeHandling(t *testing.T) {
 	require := require.New(t)
 
 	registerer := prometheus.NewRegistry()
-	mpool, err := New(
-		"mempool",
-		registerer,
-		nil,
-	)
+	mpool, err := New("mempool", registerer, nil)
 	require.NoError(err)
 
 	decisionTxs, err := createTestDecisionTxs(1)
@@ -56,11 +52,7 @@ func TestDecisionTxsInMempool(t *testing.T) {
 	require := require.New(t)
 
 	registerer := prometheus.NewRegistry()
-	mpool, err := New(
-		"mempool",
-		registerer,
-		nil,
-	)
+	mpool, err := New("mempool", registerer, nil)
 	require.NoError(err)
 
 	decisionTxs, err := createTestDecisionTxs(2)
@@ -181,7 +173,7 @@ func createTestProposalTxs(count int) ([]*txs.Tx, error) {
 	for i := 0; i < count; i++ {
 		tx, err := generateAddValidatorTx(
 			uint64(now.Add(time.Duration(count-i)*time.Second).Unix()), // startTime
-			0, // endTime
+			0,                                                          // endTime
 		)
 		if err != nil {
 			return nil, err
@@ -212,11 +204,7 @@ func TestPeekTxs(t *testing.T) {
 
 	registerer := prometheus.NewRegistry()
 	toEngine := make(chan common.Message, 100)
-	mempool, err := New(
-		"mempool",
-		registerer,
-		toEngine,
-	)
+	mempool, err := New("mempool", registerer, toEngine)
 	require.NoError(err)
 
 	testDecisionTxs, err := createTestDecisionTxs(1)
