@@ -203,6 +203,7 @@ func newEnvironment(t *testing.T) *environment {
 		txGossipFalsePositiveRate,
 		txGossipMaxFalsePositiveRate,
 	)
+	require.NoError(err)
 
 	p2pNetwork, err := p2p.NewNetwork(
 		res.ctx.Log,
