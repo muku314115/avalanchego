@@ -11,7 +11,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/network/p2p/gossip"
-	blockexecutor "github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
+	"github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
 )
@@ -47,7 +47,7 @@ func (t txGossipHandler) AppRequest(
 
 func NewVerifierMempool(
 	mempool mempool.Mempool,
-	verifier blockexecutor.Manager,
+	verifier executor.Manager,
 	bloomMaxItems uint64,
 	bloomFalsePositiveRate float64,
 	bloomMaxFalsePositiveRate float64,
@@ -71,7 +71,7 @@ func NewVerifierMempool(
 // VerifierMempool performs verification before adding something to the mempool
 type VerifierMempool struct {
 	mempool.Mempool
-	verifier blockexecutor.Manager
+	verifier executor.Manager
 
 	lock                      sync.RWMutex
 	bloomFilter               *gossip.BloomFilter
