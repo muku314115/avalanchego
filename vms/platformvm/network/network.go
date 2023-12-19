@@ -109,16 +109,7 @@ func New(
 }
 
 func (n *Network) Gossip(ctx context.Context) {
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-
-	go func() {
-		gossip.Every(ctx, n.ctx.Log, n.txPullGossiper, n.txGossipFrequency)
-		wg.Done()
-	}()
-
-	<-ctx.Done()
-	wg.Wait()
+	gossip.Every(ctx, n.ctx.Log, n.txPullGossiper, n.txGossipFrequency)
 }
 
 func (n *Network) AppGossip(ctx context.Context, nodeID ids.NodeID, msgBytes []byte) error {
