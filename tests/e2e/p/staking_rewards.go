@@ -230,7 +230,7 @@ var _ = ginkgo.Describe("[Staking Rewards]", func() {
 		})
 
 		ginkgo.By("stopping beta node to prevent it and its delegator from receiving a validation reward")
-		require.NoError(betaNode.Stop())
+		require.NoError(betaNode.Stop(e2e.DefaultContext()))
 
 		ginkgo.By("waiting until all validation periods are over")
 		// The beta validator was the last added and so has the latest end time. The
@@ -297,7 +297,7 @@ var _ = ginkgo.Describe("[Staking Rewards]", func() {
 		}
 
 		ginkgo.By("stopping alpha to free up resources for a bootstrap check")
-		require.NoError(alphaNode.Stop())
+		require.NoError(alphaNode.Stop(e2e.DefaultContext()))
 
 		e2e.CheckBootstrapIsPossible(network)
 	})
