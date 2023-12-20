@@ -235,15 +235,16 @@ func TestGetTxStatus(t *testing.T) {
 	require.Equal(status.Unknown, resp.Status)
 	require.Zero(resp.Reason)
 
-	service.vm.ctx.Lock.Lock()
-
 	// put the chain in existing chain list
 	err = service.vm.Network.IssueTx(context.Background(), tx)
 	require.ErrorIs(err, database.ErrNotFound) // Missing shared memory UTXO
+	service.vm.ctx.Lock.Lock()
 
 	mutableSharedMemory.SharedMemory = sm
 
+	service.vm.ctx.Lock.Unlock()
 	require.NoError(service.vm.Network.IssueTx(context.Background(), tx))
+	service.vm.ctx.Lock.Lock()
 
 	block, err := service.vm.BuildBlock(context.Background())
 	require.NoError(err)
@@ -337,10 +338,9 @@ func TestGetTx(t *testing.T) {
 				err = service.GetTx(nil, arg, &response)
 				require.ErrorIs(err, database.ErrNotFound) // We haven't issued the tx yet
 
-				service.vm.ctx.Lock.Lock()
-
 				require.NoError(service.vm.Network.IssueTx(context.Background(), tx))
 
+				service.vm.ctx.Lock.Lock()
 				blk, err := service.vm.BuildBlock(context.Background())
 				require.NoError(err)
 

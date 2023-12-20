@@ -32,8 +32,10 @@ func TestBuildBlockBasic(t *testing.T) {
 	require := require.New(t)
 
 	env := newEnvironment(t)
+	env.ctx.Lock.Lock()
 	defer func() {
 		require.NoError(shutdownEnvironment(env))
+		env.ctx.Lock.Unlock()
 	}()
 
 	// Create a valid transaction
@@ -50,12 +52,11 @@ func TestBuildBlockBasic(t *testing.T) {
 	txID := tx.ID()
 
 	// Issue the transaction
+	env.ctx.Lock.Unlock()
 	require.NoError(env.network.IssueTx(context.Background(), tx))
+	env.ctx.Lock.Lock()
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
-
-	env.ctx.Lock.Lock()
-	defer env.ctx.Lock.Unlock()
 
 	// [BuildBlock] should build a block with the transaction
 	blkIntf, err := env.Builder.BuildBlock(context.Background())
@@ -96,8 +97,10 @@ func TestBuildBlockShouldReward(t *testing.T) {
 	require := require.New(t)
 
 	env := newEnvironment(t)
+	env.ctx.Lock.Lock()
 	defer func() {
 		require.NoError(shutdownEnvironment(env))
+		env.ctx.Lock.Unlock()
 	}()
 
 	var (
@@ -124,12 +127,11 @@ func TestBuildBlockShouldReward(t *testing.T) {
 	txID := tx.ID()
 
 	// Issue the transaction
+	env.ctx.Lock.Unlock()
 	require.NoError(env.network.IssueTx(context.Background(), tx))
+	env.ctx.Lock.Lock()
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
-
-	env.ctx.Lock.Lock()
-	defer env.ctx.Lock.Unlock()
 
 	// Build and accept a block with the tx
 	blk, err := env.Builder.BuildBlock(context.Background())
@@ -231,8 +233,10 @@ func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	require := require.New(t)
 
 	env := newEnvironment(t)
+	env.ctx.Lock.Lock()
 	defer func() {
 		require.NoError(shutdownEnvironment(env))
+		env.ctx.Lock.Unlock()
 	}()
 
 	// Create a valid transaction
@@ -249,12 +253,11 @@ func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	txID := tx.ID()
 
 	// Issue the transaction
+	env.ctx.Lock.Unlock()
 	require.NoError(env.network.IssueTx(context.Background(), tx))
+	env.ctx.Lock.Lock()
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
-
-	env.ctx.Lock.Lock()
-	defer env.ctx.Lock.Unlock()
 
 	var (
 		now      = env.backend.Clk.Time()
@@ -492,7 +495,9 @@ func TestPreviouslyDroppedTxsCanBeReAddedToMempool(t *testing.T) {
 	txID := tx.ID()
 
 	// Issue the transaction
+	env.ctx.Lock.Unlock()
 	require.NoError(env.network.IssueTx(context.Background(), tx))
+	env.ctx.Lock.Lock()
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
 
@@ -514,7 +519,9 @@ func TestPreviouslyDroppedTxsCanBeReAddedToMempool(t *testing.T) {
 	env.mempool.Remove(tx)
 
 	// Issue the transaction again
+	env.ctx.Lock.Unlock()
 	require.NoError(env.network.IssueTx(context.Background(), tx))
+	env.ctx.Lock.Lock()
 	_, ok = env.mempool.Get(txID)
 	require.True(ok)
 

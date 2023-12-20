@@ -291,7 +291,14 @@ func addSubnetValidator(vm *VM, data *validatorInputData, subnetID ids.ID) (*sta
 	if err != nil {
 		return nil, fmt.Errorf("could not create AddSubnetValidatorTx: %w", err)
 	}
-	return internalAddValidator(vm, signedTx)
+
+	vm.ctx.Lock.Unlock()
+	if err := vm.Network.IssueTx(context.Background(), signedTx); err != nil {
+		return nil, fmt.Errorf("could not add tx to mempool: %w", err)
+	}
+	vm.ctx.Lock.Lock()
+
+	return acceptBlockWithTx(vm, signedTx)
 }
 
 func addPrimaryValidatorWithBLSKey(vm *VM, data *validatorInputData) (*state.Staker, error) {
@@ -351,7 +358,14 @@ func addPrimaryValidatorWithBLSKey(vm *VM, data *validatorInputData) (*state.Sta
 	if err := signedTx.SyntacticVerify(vm.ctx); err != nil {
 		return nil, fmt.Errorf("failed syntax verification of AddPermissionlessValidatorTx: %w", err)
 	}
-	return internalAddValidator(vm, signedTx)
+
+	vm.ctx.Lock.Unlock()
+	if err := vm.Network.IssueTx(context.Background(), signedTx); err != nil {
+		return nil, fmt.Errorf("could not add tx to mempool: %w", err)
+	}
+	vm.ctx.Lock.Lock()
+
+	return acceptBlockWithTx(vm, signedTx)
 }
 
 func addPrimaryValidatorWithoutBLSKey(vm *VM, data *validatorInputData) (*state.Staker, error) {
@@ -369,14 +383,17 @@ func addPrimaryValidatorWithoutBLSKey(vm *VM, data *validatorInputData) (*state.
 	if err != nil {
 		return nil, fmt.Errorf("could not create AddValidatorTx: %w", err)
 	}
-	return internalAddValidator(vm, signedTx)
-}
 
-func internalAddValidator(vm *VM, signedTx *txs.Tx) (*state.Staker, error) {
+	vm.ctx.Lock.Unlock()
 	if err := vm.Network.IssueTx(context.Background(), signedTx); err != nil {
 		return nil, fmt.Errorf("could not add tx to mempool: %w", err)
 	}
+	vm.ctx.Lock.Lock()
 
+	return acceptBlockWithTx(vm, signedTx)
+}
+
+func acceptBlockWithTx(vm *VM, signedTx *txs.Tx) (*state.Staker, error) {
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed building block: %w", err)
@@ -783,9 +800,11 @@ func buildVM(t *testing.T) (*VM, ids.ID, error) {
 	if err != nil {
 		return nil, ids.Empty, err
 	}
+	vm.ctx.Lock.Unlock()
 	if err := vm.Network.IssueTx(context.Background(), testSubnet1); err != nil {
 		return nil, ids.Empty, err
 	}
+	vm.ctx.Lock.Lock()
 
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	if err != nil {

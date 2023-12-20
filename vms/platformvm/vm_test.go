@@ -350,7 +350,11 @@ func defaultVM(t *testing.T, fork activeFork) (*VM, database.Database, *mutableS
 		keys[0].PublicKey().Address(),    // change addr
 	)
 	require.NoError(err)
+
+	ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), testSubnet1))
+	ctx.Lock.Lock()
+
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
 	require.NoError(blk.Verify(context.Background()))
@@ -447,7 +451,9 @@ func TestAddValidatorCommit(t *testing.T) {
 	require.NoError(err)
 
 	// trigger block creation
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), tx))
+	vm.ctx.Lock.Lock()
 
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
@@ -548,7 +554,9 @@ func TestAddValidatorReject(t *testing.T) {
 	require.NoError(err)
 
 	// trigger block creation
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), tx))
+	vm.ctx.Lock.Lock()
 
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
@@ -593,7 +601,9 @@ func TestAddValidatorInvalidNotReissued(t *testing.T) {
 	require.NoError(err)
 
 	// trigger block creation
+	vm.ctx.Lock.Unlock()
 	err = vm.Network.IssueTx(context.Background(), tx)
+	vm.ctx.Lock.Lock()
 	require.ErrorIs(err, txexecutor.ErrAlreadyValidator)
 }
 
@@ -628,7 +638,9 @@ func TestAddSubnetValidatorAccept(t *testing.T) {
 	require.NoError(err)
 
 	// trigger block creation
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), tx))
+	vm.ctx.Lock.Lock()
 
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
@@ -676,7 +688,9 @@ func TestAddSubnetValidatorReject(t *testing.T) {
 	require.NoError(err)
 
 	// trigger block creation
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), tx))
+	vm.ctx.Lock.Lock()
 
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
@@ -870,7 +884,9 @@ func TestCreateChain(t *testing.T) {
 	)
 	require.NoError(err)
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), tx))
+	vm.ctx.Lock.Lock()
 
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err) // should contain proposal to create chain
@@ -921,7 +937,9 @@ func TestCreateSubnet(t *testing.T) {
 	)
 	require.NoError(err)
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), createSubnetTx))
+	vm.ctx.Lock.Lock()
 
 	// should contain the CreateSubnetTx
 	blk, err := vm.Builder.BuildBlock(context.Background())
@@ -962,7 +980,9 @@ func TestCreateSubnet(t *testing.T) {
 	)
 	require.NoError(err)
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), addValidatorTx))
+	vm.ctx.Lock.Lock()
 
 	blk, err = vm.Builder.BuildBlock(context.Background()) // should add validator to the new subnet
 	require.NoError(err)
@@ -1065,7 +1085,9 @@ func TestAtomicImport(t *testing.T) {
 	)
 	require.NoError(err)
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), tx))
+	vm.ctx.Lock.Lock()
 
 	blk, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
@@ -2065,7 +2087,9 @@ func TestRemovePermissionedValidatorDuringAddPending(t *testing.T) {
 	)
 	require.NoError(err)
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), addValidatorTx))
+	vm.ctx.Lock.Lock()
 
 	// trigger block creation for the validator tx
 	addValidatorBlock, err := vm.Builder.BuildBlock(context.Background())
@@ -2082,7 +2106,9 @@ func TestRemovePermissionedValidatorDuringAddPending(t *testing.T) {
 	)
 	require.NoError(err)
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), createSubnetTx))
+	vm.ctx.Lock.Lock()
 
 	// trigger block creation for the subnet tx
 	createSubnetBlock, err := vm.Builder.BuildBlock(context.Background())
@@ -2151,7 +2177,10 @@ func TestTransferSubnetOwnershipTx(t *testing.T) {
 	require.NoError(err)
 	subnetID := createSubnetTx.ID()
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), createSubnetTx))
+	vm.ctx.Lock.Lock()
+
 	createSubnetBlock, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
 
@@ -2183,7 +2212,10 @@ func TestTransferSubnetOwnershipTx(t *testing.T) {
 	)
 	require.NoError(err)
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), transferSubnetOwnershipTx))
+	vm.ctx.Lock.Lock()
+
 	transferSubnetOwnershipBlock, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
 
@@ -2269,7 +2301,10 @@ func TestBaseTx(t *testing.T) {
 	require.Equal(vm.TxFee, totalInputAmt-totalOutputAmt)
 	require.Equal(sendAmt, key1OutputAmt)
 
+	vm.ctx.Lock.Unlock()
 	require.NoError(vm.Network.IssueTx(context.Background(), baseTx))
+	vm.ctx.Lock.Lock()
+
 	baseTxBlock, err := vm.Builder.BuildBlock(context.Background())
 	require.NoError(err)
 
