@@ -198,6 +198,7 @@ func newEnvironment(t *testing.T) *environment {
 
 	verifierMempool, err := network.NewVerifierMempool(
 		res.mempool,
+		res.ctx,
 		res.blkManager,
 		txGossipBloomMaxItems,
 		txGossipFalsePositiveRate,

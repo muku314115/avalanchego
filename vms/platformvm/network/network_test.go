@@ -199,8 +199,10 @@ func TestNetworkAppGossip(t *testing.T) {
 			defer cancel()
 			ctrl := gomock.NewController(t)
 
+			snowCtx := snow.DefaultContextTest()
 			mempool, err := NewVerifierMempool(
 				tt.mempoolFunc(ctrl),
+				snowCtx,
 				tt.managerFunc(ctrl),
 				txGossipBloomMaxItems,
 				txGossipFalsePositiveRate,
@@ -208,7 +210,6 @@ func TestNetworkAppGossip(t *testing.T) {
 			)
 			require.NoError(err)
 
-			snowCtx := snow.DefaultContextTest()
 			sender := tt.appSenderFunc(ctrl)
 			p2pNetwork, err := p2p.NewNetwork(
 				snowCtx.Log,
@@ -233,7 +234,7 @@ func TestNetworkAppGossip(t *testing.T) {
 				sender,
 				p2pNetwork,
 				validators,
-				gossip.NoOpAccumulator[*txs.Tx]{},
+				gossip.NoOpAccumulator[*Tx]{},
 				gossip.NoOpGossiper{},
 				p2p.NoOpHandler{},
 				txGossipHandlerID,
@@ -358,8 +359,10 @@ func TestNetworkIssueTx(t *testing.T) {
 			require := require.New(t)
 			ctrl := gomock.NewController(t)
 
+			snowCtx := snow.DefaultContextTest()
 			mempool, err := NewVerifierMempool(
 				tt.mempoolFunc(ctrl),
+				snowCtx,
 				tt.managerFunc(ctrl),
 				txGossipBloomMaxItems,
 				txGossipFalsePositiveRate,
@@ -367,7 +370,6 @@ func TestNetworkIssueTx(t *testing.T) {
 			)
 			require.NoError(err)
 
-			snowCtx := snow.DefaultContextTest()
 			sender := tt.appSenderFunc(ctrl)
 			p2pNetwork, err := p2p.NewNetwork(
 				snowCtx.Log,
@@ -392,7 +394,7 @@ func TestNetworkIssueTx(t *testing.T) {
 				sender,
 				p2pNetwork,
 				validators,
-				gossip.NoOpAccumulator[*txs.Tx]{},
+				gossip.NoOpAccumulator[*Tx]{},
 				gossip.NoOpGossiper{},
 				p2p.NoOpHandler{},
 				txGossipHandlerID,
@@ -411,8 +413,10 @@ func TestNetworkGossipTx(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 
+	snowCtx := snow.DefaultContextTest()
 	mempool, err := NewVerifierMempool(
 		mempool.NewMockMempool(ctrl),
+		snowCtx,
 		executor.NewMockManager(ctrl),
 		txGossipBloomMaxItems,
 		txGossipFalsePositiveRate,
@@ -420,7 +424,6 @@ func TestNetworkGossipTx(t *testing.T) {
 	)
 	require.NoError(err)
 
-	snowCtx := snow.DefaultContextTest()
 	appSender := common.NewMockSender(ctrl)
 	p2pNetwork, err := p2p.NewNetwork(
 		snowCtx.Log,
@@ -444,7 +447,7 @@ func TestNetworkGossipTx(t *testing.T) {
 		appSender,
 		p2pNetwork,
 		validators,
-		gossip.NoOpAccumulator[*txs.Tx]{},
+		gossip.NoOpAccumulator[*Tx]{},
 		gossip.NoOpGossiper{},
 		p2p.NoOpHandler{},
 		txGossipHandlerID,
@@ -506,12 +509,12 @@ func TestNetworkOutboundPushGossip(t *testing.T) {
 		sender,
 		p2pNetwork,
 		validators,
-		gossip.TestAccumulator[*txs.Tx]{
+		gossip.TestAccumulator[*Tx]{
 			GossipF: func(context.Context) error {
 				gossiped = true
 				return nil
 			},
-			AddF: func(txs ...*txs.Tx) {
+			AddF: func(txs ...*Tx) {
 				require.Len(txs, 1)
 				require.Equal(wantTx, txs[0])
 				added = true
@@ -570,7 +573,7 @@ func TestNetworkInboundTxPushGossip(t *testing.T) {
 		sender,
 		p2pNetwork,
 		validators,
-		gossip.NoOpAccumulator[*txs.Tx]{},
+		gossip.NoOpAccumulator[*Tx]{},
 		gossip.NoOpGossiper{},
 		p2p.TestHandler{
 			AppGossipF: func(ctx context.Context, nodeID ids.NodeID, gossipBytes []byte) {
@@ -665,7 +668,7 @@ func TestNetworkServesInboundPullGossipRequest(t *testing.T) {
 				sender,
 				p2pNetwork,
 				validators,
-				gossip.NoOpAccumulator[*txs.Tx]{},
+				gossip.NoOpAccumulator[*Tx]{},
 				gossip.NoOpGossiper{},
 				p2p.TestHandler{
 					AppRequestF: func(ctx context.Context, nodeID ids.NodeID, deadline time.Time, requestBytes []byte) ([]byte, error) {
@@ -758,7 +761,7 @@ func TestNetworkOutboundTxPullGossip(t *testing.T) {
 				sender,
 				p2pNetwork,
 				validators,
-				gossip.NoOpAccumulator[*txs.Tx]{},
+				gossip.NoOpAccumulator[*Tx]{},
 				&gossip.TestGossiper{
 					GossipF: func(context.Context) error {
 						called.Set(true)
@@ -833,13 +836,13 @@ func newTestMempool() (*testMempool, error) {
 }
 
 type testMempool struct {
-	mempool  set.Set[*txs.Tx]
+	mempool  set.Set[*Tx]
 	dropped  map[ids.ID]error
 	bloom    *gossip.BloomFilter
 	building bool
 }
 
-func (t *testMempool) Add(tx *txs.Tx) error {
+func (t *testMempool) Add(tx *Tx) error {
 	if t.mempool.Contains(tx) {
 		return fmt.Errorf("tx %s already in mempool", tx.ID())
 	}
@@ -848,7 +851,7 @@ func (t *testMempool) Add(tx *txs.Tx) error {
 	return nil
 }
 
-func (t *testMempool) Iterate(f func(tx *txs.Tx) bool) {
+func (t *testMempool) Iterate(f func(tx *Tx) bool) {
 	for tx := range t.mempool {
 		if !f(tx) {
 			return

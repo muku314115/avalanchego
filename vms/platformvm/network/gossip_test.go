@@ -33,9 +33,11 @@ func TestVerifierMempoolVerificationError(t *testing.T) {
 	}
 
 	snowCtx := snow.DefaultContextTest()
-	verifier := executor.NewMockManager(ctrl)
-	verifier.EXPECT().VerifyTx(tx).Return(errFoo)
 	mempool := mempool.NewMockMempool(ctrl)
+	verifier := executor.NewMockManager(ctrl)
+
+	mempool.EXPECT().Has(tx.ID()).Return(false)
+	verifier.EXPECT().VerifyTx(tx.Tx).Return(errFoo)
 	mempool.EXPECT().MarkDropped(tx.ID(), errFoo)
 
 	verifierMempool, err := NewVerifierMempool(
@@ -64,9 +66,11 @@ func TestVerifierMempoolAddError(t *testing.T) {
 
 	snowCtx := snow.DefaultContextTest()
 	verifier := executor.NewMockManager(ctrl)
-	verifier.EXPECT().VerifyTx(tx).Return(nil)
 	mempool := mempool.NewMockMempool(ctrl)
-	mempool.EXPECT().Add(tx).Return(errFoo)
+
+	mempool.EXPECT().Has(tx.ID()).Return(false)
+	verifier.EXPECT().VerifyTx(tx.Tx).Return(nil)
+	mempool.EXPECT().Add(tx.Tx).Return(errFoo)
 	mempool.EXPECT().MarkDropped(tx.ID(), errFoo).AnyTimes()
 
 	verifierMempool, err := NewVerifierMempool(
@@ -82,16 +86,23 @@ func TestVerifierMempoolAddError(t *testing.T) {
 	require.ErrorIs(err, errFoo)
 }
 
-// Adding a tx to the mempool should add it to the bloom filter
-func TestVerifierMempoolAddBloomFilter(t *testing.T) {
+// Adding a duplicate to the mempool should return an error
+func TestVerifierMempoolHas(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 
 	snowCtx := snow.DefaultContextTest()
-	verifier := executor.NewMockManager(ctrl)
-	verifier.EXPECT().VerifyTx(gomock.Any()).Return(nil).AnyTimes()
 	mempool := mempool.NewMockMempool(ctrl)
-	mempool.EXPECT().Add(gomock.Any()).Return(nil).AnyTimes()
+	verifier := executor.NewMockManager(ctrl)
+
+	tx := &Tx{
+		Tx: &txs.Tx{
+			TxID: ids.GenerateTestID(),
+		},
+	}
+
+	mempool.EXPECT().Has(tx.ID()).Return(true)
+	mempool.EXPECT().MarkDropped(tx.ID(), gomock.Any())
 
 	verifierMempool, err := NewVerifierMempool(
 		mempool,
@@ -103,11 +114,39 @@ func TestVerifierMempoolAddBloomFilter(t *testing.T) {
 	)
 	require.NoError(err)
 
+	err = verifierMempool.Add(tx)
+	require.ErrorIs(err, ErrTxPending)
+}
+
+// Adding a tx to the mempool should add it to the bloom filter
+func TestVerifierMempoolAddBloomFilter(t *testing.T) {
+	require := require.New(t)
+	ctrl := gomock.NewController(t)
+
 	tx := &Tx{
 		Tx: &txs.Tx{
 			TxID: ids.GenerateTestID(),
 		},
 	}
+
+	snowCtx := snow.DefaultContextTest()
+	verifier := executor.NewMockManager(ctrl)
+	mempool := mempool.NewMockMempool(ctrl)
+
+	mempool.EXPECT().Has(tx.ID()).Return(false)
+	verifier.EXPECT().VerifyTx(tx.Tx).Return(nil)
+	mempool.EXPECT().Add(tx.Tx).Return(nil)
+
+	verifierMempool, err := NewVerifierMempool(
+		mempool,
+		snowCtx,
+		verifier,
+		txGossipBloomMaxItems,
+		txGossipFalsePositiveRate,
+		txGossipMaxFalsePositiveRate,
+	)
+	require.NoError(err)
+
 	require.NoError(verifierMempool.Add(tx))
 
 	bloomBytes, salt, err := verifierMempool.GetFilter()
