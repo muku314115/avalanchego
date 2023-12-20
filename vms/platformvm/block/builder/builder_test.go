@@ -32,10 +32,8 @@ func TestBuildBlockBasic(t *testing.T) {
 	require := require.New(t)
 
 	env := newEnvironment(t)
-	env.ctx.Lock.Lock()
 	defer func() {
 		require.NoError(shutdownEnvironment(env))
-		env.ctx.Lock.Unlock()
 	}()
 
 	// Create a valid transaction
@@ -55,6 +53,9 @@ func TestBuildBlockBasic(t *testing.T) {
 	require.NoError(env.network.IssueTx(context.Background(), tx))
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
+
+	env.ctx.Lock.Lock()
+	defer env.ctx.Lock.Unlock()
 
 	// [BuildBlock] should build a block with the transaction
 	blkIntf, err := env.Builder.BuildBlock(context.Background())
@@ -95,10 +96,8 @@ func TestBuildBlockShouldReward(t *testing.T) {
 	require := require.New(t)
 
 	env := newEnvironment(t)
-	env.ctx.Lock.Lock()
 	defer func() {
 		require.NoError(shutdownEnvironment(env))
-		env.ctx.Lock.Unlock()
 	}()
 
 	var (
@@ -128,6 +127,9 @@ func TestBuildBlockShouldReward(t *testing.T) {
 	require.NoError(env.network.IssueTx(context.Background(), tx))
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
+
+	env.ctx.Lock.Lock()
+	defer env.ctx.Lock.Unlock()
 
 	// Build and accept a block with the tx
 	blk, err := env.Builder.BuildBlock(context.Background())
@@ -229,10 +231,8 @@ func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	require := require.New(t)
 
 	env := newEnvironment(t)
-	env.ctx.Lock.Lock()
 	defer func() {
 		require.NoError(shutdownEnvironment(env))
-		env.ctx.Lock.Unlock()
 	}()
 
 	// Create a valid transaction
@@ -267,6 +267,8 @@ func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	// Advance wall clock to [nextTime] + [txexecutor.SyncBound]
 	env.backend.Clk.Set(nextTime.Add(txexecutor.SyncBound))
 
+	env.ctx.Lock.Lock()
+	defer env.ctx.Lock.Unlock()
 	// [BuildBlock] should build a block advancing the time to [nextTime],
 	// not the current wall clock.
 	blkIntf, err := env.Builder.BuildBlock(context.Background())

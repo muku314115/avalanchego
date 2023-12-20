@@ -109,14 +109,6 @@ func (n *network) AppGossip(ctx context.Context, nodeID ids.NodeID, msgBytes []b
 	}
 	txID := tx.ID()
 
-	// We need to grab the context lock here to avoid racy behavior with
-	// transaction verification + mempool modifications.
-	//
-	// Invariant: tx should not be referenced again without the context lock
-	// held to avoid any data races.
-	n.ctx.Lock.Lock()
-	defer n.ctx.Lock.Unlock()
-
 	if reason := n.mempool.GetDropReason(txID); reason != nil {
 		// If the tx is being dropped - just ignore it
 		return nil
@@ -148,6 +140,14 @@ func (n *network) IssueTx(ctx context.Context, tx *txs.Tx) error {
 
 // returns nil if the tx is in the mempool
 func (n *network) issueTx(tx *txs.Tx) error {
+	// We need to grab the context lock here to avoid racy behavior with
+	// transaction verification + mempool modifications.
+	//
+	// Invariant: tx should not be referenced again without the context lock
+	// held to avoid any data races.
+	n.ctx.Lock.Lock()
+	defer n.ctx.Lock.Unlock()
+
 	txID := tx.ID()
 	if _, ok := n.mempool.Get(txID); ok {
 		// The tx is already in the mempool
