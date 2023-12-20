@@ -13,6 +13,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p/gossip"
+	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
@@ -25,8 +26,13 @@ func TestVerifierMempoolVerificationError(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 
-	tx := &txs.Tx{}
+	tx := &Tx{
+		Tx: &txs.Tx{
+			TxID: ids.GenerateTestID(),
+		},
+	}
 
+	snowCtx := snow.DefaultContextTest()
 	verifier := executor.NewMockManager(ctrl)
 	verifier.EXPECT().VerifyTx(tx).Return(errFoo)
 	mempool := mempool.NewMockMempool(ctrl)
@@ -34,6 +40,7 @@ func TestVerifierMempoolVerificationError(t *testing.T) {
 
 	verifierMempool, err := NewVerifierMempool(
 		mempool,
+		snowCtx,
 		verifier,
 		txGossipBloomMaxItems,
 		txGossipFalsePositiveRate,
@@ -49,8 +56,13 @@ func TestVerifierMempoolAddError(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 
-	tx := &txs.Tx{}
+	tx := &Tx{
+		Tx: &txs.Tx{
+			TxID: ids.GenerateTestID(),
+		},
+	}
 
+	snowCtx := snow.DefaultContextTest()
 	verifier := executor.NewMockManager(ctrl)
 	verifier.EXPECT().VerifyTx(tx).Return(nil)
 	mempool := mempool.NewMockMempool(ctrl)
@@ -59,6 +71,7 @@ func TestVerifierMempoolAddError(t *testing.T) {
 
 	verifierMempool, err := NewVerifierMempool(
 		mempool,
+		snowCtx,
 		verifier,
 		txGossipBloomMaxItems,
 		txGossipFalsePositiveRate,
@@ -74,6 +87,7 @@ func TestVerifierMempoolAddBloomFilter(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 
+	snowCtx := snow.DefaultContextTest()
 	verifier := executor.NewMockManager(ctrl)
 	verifier.EXPECT().VerifyTx(gomock.Any()).Return(nil).AnyTimes()
 	mempool := mempool.NewMockMempool(ctrl)
@@ -81,6 +95,7 @@ func TestVerifierMempoolAddBloomFilter(t *testing.T) {
 
 	verifierMempool, err := NewVerifierMempool(
 		mempool,
+		snowCtx,
 		verifier,
 		txGossipBloomMaxItems,
 		txGossipFalsePositiveRate,
@@ -88,8 +103,10 @@ func TestVerifierMempoolAddBloomFilter(t *testing.T) {
 	)
 	require.NoError(err)
 
-	tx := &txs.Tx{
-		TxID: ids.GenerateTestID(),
+	tx := &Tx{
+		Tx: &txs.Tx{
+			TxID: ids.GenerateTestID(),
+		},
 	}
 	require.NoError(verifierMempool.Add(tx))
 
