@@ -17,8 +17,10 @@ import (
 )
 
 var (
-	_ p2p.Handler         = (*txGossipHandler)(nil)
-	_ gossip.Set[*txs.Tx] = (*VerifierMempool)(nil)
+	_ p2p.Handler            = (*txGossipHandler)(nil)
+	_ gossip.Gossipable      = (*Tx)(nil)
+	_ gossip.Marshaller[*Tx] = (*TxMarshaller)(nil)
+	_ gossip.Set[*Tx]        = (*VerifierMempool)(nil)
 )
 
 // txGossipHandler is the handler called when serving gossip messages
@@ -78,13 +80,13 @@ type VerifierMempool struct {
 	bloomMaxFalsePositiveRate float64
 }
 
-func (v *VerifierMempool) Add(tx *txs.Tx) error {
-	if err := v.verifier.VerifyTx(tx); err != nil {
+func (v *VerifierMempool) Add(tx *Tx) error {
+	if err := v.verifier.VerifyTx(tx.Tx); err != nil {
 		v.Mempool.MarkDropped(tx.ID(), err)
 		return err
 	}
 
-	if err := v.Mempool.Add(tx); err != nil {
+	if err := v.Mempool.Add(tx.Tx); err != nil {
 		v.Mempool.MarkDropped(tx.ID(), err)
 		return err
 	}
@@ -96,7 +98,7 @@ func (v *VerifierMempool) Add(tx *txs.Tx) error {
 
 	ok, err := gossip.ResetBloomFilterIfNeeded(v.bloomFilter, v.bloomMaxFalsePositiveRate)
 	if ok {
-		v.Iterate(func(tx *txs.Tx) bool {
+		v.Iterate(func(tx *Tx) bool {
 			v.bloomFilter.Add(tx)
 			return true
 		})
@@ -111,4 +113,33 @@ func (v *VerifierMempool) GetFilter() (bloom []byte, salt []byte, err error) {
 
 	bloomBytes, err := v.bloomFilter.Bloom.MarshalBinary()
 	return bloomBytes, v.bloomFilter.Salt[:], err
+}
+
+func (v *VerifierMempool) Iterate(f func(tx *Tx) bool) {
+	v.Mempool.Iterate(func(tx *txs.Tx) bool {
+		return f(&Tx{Tx: tx})
+	})
+}
+
+type TxMarshaller struct{}
+
+func (t TxMarshaller) MarshalGossip(tx *Tx) ([]byte, error) {
+	return tx.Bytes(), nil
+}
+
+func (t TxMarshaller) UnmarshalGossip(bytes []byte) (*Tx, error) {
+	parsed, err := txs.Parse(txs.Codec, bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Tx{Tx: parsed}, nil
+}
+
+type Tx struct {
+	*txs.Tx
+}
+
+func (t *Tx) GossipID() ids.ID {
+	return t.ID()
 }

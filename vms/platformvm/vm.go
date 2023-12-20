@@ -239,7 +239,9 @@ func (vm *VM) Initialize(
 		return fmt.Errorf("failed to initialize gossip metrics: %w", err)
 	}
 
-	txPushGossiper := gossip.NewPushGossiper[*txs.Tx](
+	marshaller := network.TxMarshaller{}
+	txPushGossiper := gossip.NewPushGossiper[*network.Tx](
+		marshaller,
 		txGossipClient,
 		txGossipMetrics,
 		txGossipMaxGossipSize,
@@ -256,16 +258,18 @@ func (vm *VM) Initialize(
 		return fmt.Errorf("failed to initialize verification mempool: %w", err)
 	}
 
-	txPullGossiper := gossip.NewPullGossiper[txs.Tx, *txs.Tx](
+	txPullGossiper := gossip.NewPullGossiper[*network.Tx](
 		chainCtx.Log,
+		marshaller,
 		verifierMempool,
 		txGossipClient,
 		txGossipMetrics,
 		txGossipPollSize,
 	)
 
-	txGossipHandler := gossip.NewHandler[txs.Tx, *txs.Tx](
+	txGossipHandler := gossip.NewHandler[*network.Tx](
 		chainCtx.Log,
+		marshaller,
 		txPushGossiper,
 		verifierMempool,
 		txGossipMetrics,

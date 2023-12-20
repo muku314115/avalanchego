@@ -25,7 +25,7 @@ import (
 const recentCacheSize = 512
 
 type Mempool interface {
-	gossip.Set[*txs.Tx]
+	gossip.Set[*Tx]
 	GetDropReason(txID ids.ID) error
 	RequestBuildBlock(emptyBlockPermitted bool)
 }
@@ -38,7 +38,7 @@ type Network struct {
 	partialSyncPrimaryNetwork bool
 	appSender                 common.AppSender
 
-	txPushGossiper    gossip.Accumulator[*txs.Tx]
+	txPushGossiper    gossip.Accumulator[*Tx]
 	txPullGossiper    gossip.Gossiper
 	txGossipFrequency time.Duration
 
@@ -56,7 +56,7 @@ func New(
 	appSender common.AppSender,
 	p2pNetwork *p2p.Network,
 	validators *p2p.Validators,
-	txPushGossiper gossip.Accumulator[*txs.Tx],
+	txPushGossiper gossip.Accumulator[*Tx],
 	txPullGossiper gossip.Gossiper,
 	handler p2p.Handler,
 	txGossipHandlerID uint64,
@@ -165,10 +165,12 @@ func (n *Network) AppGossip(ctx context.Context, nodeID ids.NodeID, msgBytes []b
 		// If the tx is being dropped - just ignore it
 		return nil
 	}
-	if err := n.issueTx(tx); err == nil {
+
+	gossipTx := &Tx{Tx: tx}
+	if err := n.issueTx(gossipTx); err == nil {
 		n.legacyGossipTx(ctx, txID, msgBytes)
 
-		n.txPushGossiper.Add(tx)
+		n.txPushGossiper.Add(gossipTx)
 		return n.txPushGossiper.Gossip(ctx)
 	}
 	return nil
@@ -179,7 +181,9 @@ func (n *Network) AppGossip(ctx context.Context, nodeID ids.NodeID, msgBytes []b
 //
 // Invariant: Assumes the context lock is held.
 func (n *Network) IssueTx(ctx context.Context, tx *txs.Tx) error {
-	if err := n.issueTx(tx); err != nil {
+	gossipTx := &Tx{Tx: tx}
+
+	if err := n.issueTx(gossipTx); err != nil {
 		return err
 	}
 
@@ -194,12 +198,12 @@ func (n *Network) IssueTx(ctx context.Context, tx *txs.Tx) error {
 
 	txID := tx.ID()
 	n.legacyGossipTx(ctx, txID, msgBytes)
-	n.txPushGossiper.Add(tx)
+	n.txPushGossiper.Add(gossipTx)
 	return n.txPushGossiper.Gossip(ctx)
 }
 
 // returns nil if the tx is in the mempool
-func (n *Network) issueTx(tx *txs.Tx) error {
+func (n *Network) issueTx(tx *Tx) error {
 	// If we are partially syncing the Primary Network, we should not be
 	// maintaining the transaction mempool locally.
 	if n.partialSyncPrimaryNetwork {

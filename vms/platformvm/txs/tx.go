@@ -9,7 +9,6 @@ import (
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/network/p2p/gossip"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/hashing"
@@ -22,8 +21,6 @@ var (
 	ErrNilSignedTx = errors.New("nil signed tx is not valid")
 
 	errSignedTxNotInitialized = errors.New("signed tx was never initialized and is not valid")
-
-	_ gossip.Gossipable = (*Tx)(nil)
 )
 
 // Tx is a signed transaction
@@ -154,23 +151,5 @@ func (tx *Tx) Sign(c codec.Manager, signers [][]*secp256k1.PrivateKey) error {
 		return fmt.Errorf("couldn't marshal ProposalTx: %w", err)
 	}
 	tx.SetBytes(unsignedBytes, signedBytes)
-	return nil
-}
-
-func (tx *Tx) GetID() ids.ID {
-	return tx.ID()
-}
-
-func (tx *Tx) Marshal() ([]byte, error) {
-	return tx.Bytes(), nil
-}
-
-func (tx *Tx) Unmarshal(bytes []byte) error {
-	parsed, err := Parse(Codec, bytes)
-	if err != nil {
-		return err
-	}
-
-	*tx = *parsed
 	return nil
 }
