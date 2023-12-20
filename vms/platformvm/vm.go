@@ -249,6 +249,7 @@ func (vm *VM) Initialize(
 
 	verifierMempool, err := network.NewVerifierMempool(
 		mempool,
+		chainCtx,
 		vm.manager,
 		txGossipBloomMaxItems,
 		txGossipBloomFalsePositiveRate,
