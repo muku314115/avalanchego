@@ -253,6 +253,9 @@ func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
 
+	env.ctx.Lock.Lock()
+	defer env.ctx.Lock.Unlock()
+
 	var (
 		now      = env.backend.Clk.Time()
 		nextTime = now.Add(2 * txexecutor.SyncBound)
@@ -267,8 +270,6 @@ func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	// Advance wall clock to [nextTime] + [txexecutor.SyncBound]
 	env.backend.Clk.Set(nextTime.Add(txexecutor.SyncBound))
 
-	env.ctx.Lock.Lock()
-	defer env.ctx.Lock.Unlock()
 	// [BuildBlock] should build a block advancing the time to [nextTime],
 	// not the current wall clock.
 	blkIntf, err := env.Builder.BuildBlock(context.Background())

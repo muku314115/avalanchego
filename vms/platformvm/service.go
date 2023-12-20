@@ -1233,8 +1233,6 @@ func (s *Service) AddValidator(req *http.Request, args *AddValidatorArgs, reply 
 	}
 
 	s.vm.ctx.Lock.Lock()
-	defer s.vm.ctx.Lock.Unlock()
-
 	user, err := keystore.NewUserFromKeystore(s.vm.ctx.Keystore, args.Username, args.Password)
 	if err != nil {
 		return err
@@ -1281,6 +1279,8 @@ func (s *Service) AddValidator(req *http.Request, args *AddValidatorArgs, reply 
 
 	reply.TxID = tx.ID()
 	reply.ChangeAddr, err = s.addrManager.FormatLocalAddress(changeAddr)
+
+	s.vm.ctx.Lock.Unlock()
 
 	return utils.Err(
 		err,
@@ -1344,7 +1344,6 @@ func (s *Service) AddDelegator(req *http.Request, args *AddDelegatorArgs, reply 
 	}
 
 	s.vm.ctx.Lock.Lock()
-	defer s.vm.ctx.Lock.Unlock()
 
 	user, err := keystore.NewUserFromKeystore(s.vm.ctx.Keystore, args.Username, args.Password)
 	if err != nil {
@@ -1391,6 +1390,8 @@ func (s *Service) AddDelegator(req *http.Request, args *AddDelegatorArgs, reply 
 
 	reply.TxID = tx.ID()
 	reply.ChangeAddr, err = s.addrManager.FormatLocalAddress(changeAddr)
+
+	s.vm.ctx.Lock.Unlock()
 
 	return utils.Err(
 		err,
@@ -1451,7 +1452,6 @@ func (s *Service) AddSubnetValidator(req *http.Request, args *AddSubnetValidator
 	}
 
 	s.vm.ctx.Lock.Lock()
-	defer s.vm.ctx.Lock.Unlock()
 
 	user, err := keystore.NewUserFromKeystore(s.vm.ctx.Keystore, args.Username, args.Password)
 	if err != nil {
@@ -1498,6 +1498,8 @@ func (s *Service) AddSubnetValidator(req *http.Request, args *AddSubnetValidator
 	response.TxID = tx.ID()
 	response.ChangeAddr, err = s.addrManager.FormatLocalAddress(changeAddr)
 
+	s.vm.ctx.Lock.Unlock()
+
 	return utils.Err(
 		err,
 		s.vm.Network.IssueTx(req.Context(), tx),
@@ -1534,7 +1536,6 @@ func (s *Service) CreateSubnet(req *http.Request, args *CreateSubnetArgs, respon
 	}
 
 	s.vm.ctx.Lock.Lock()
-	defer s.vm.ctx.Lock.Unlock()
 
 	user, err := keystore.NewUserFromKeystore(s.vm.ctx.Keystore, args.Username, args.Password)
 	if err != nil {
@@ -1573,6 +1574,8 @@ func (s *Service) CreateSubnet(req *http.Request, args *CreateSubnetArgs, respon
 
 	response.TxID = tx.ID()
 	response.ChangeAddr, err = s.addrManager.FormatLocalAddress(changeAddr)
+
+	s.vm.ctx.Lock.Unlock()
 
 	return utils.Err(
 		err,
@@ -1629,7 +1632,6 @@ func (s *Service) ExportAVAX(req *http.Request, args *ExportAVAXArgs, response *
 	}
 
 	s.vm.ctx.Lock.Lock()
-	defer s.vm.ctx.Lock.Unlock()
 
 	user, err := keystore.NewUserFromKeystore(s.vm.ctx.Keystore, args.Username, args.Password)
 	if err != nil {
@@ -1669,6 +1671,8 @@ func (s *Service) ExportAVAX(req *http.Request, args *ExportAVAXArgs, response *
 
 	response.TxID = tx.ID()
 	response.ChangeAddr, err = s.addrManager.FormatLocalAddress(changeAddr)
+
+	s.vm.ctx.Lock.Unlock()
 
 	return utils.Err(
 		err,
@@ -1716,7 +1720,6 @@ func (s *Service) ImportAVAX(req *http.Request, args *ImportAVAXArgs, response *
 	}
 
 	s.vm.ctx.Lock.Lock()
-	defer s.vm.ctx.Lock.Unlock()
 
 	user, err := keystore.NewUserFromKeystore(s.vm.ctx.Keystore, args.Username, args.Password)
 	if err != nil {
@@ -1754,6 +1757,8 @@ func (s *Service) ImportAVAX(req *http.Request, args *ImportAVAXArgs, response *
 
 	response.TxID = tx.ID()
 	response.ChangeAddr, err = s.addrManager.FormatLocalAddress(changeAddr)
+
+	s.vm.ctx.Lock.Unlock()
 
 	return utils.Err(
 		err,
@@ -1836,7 +1841,6 @@ func (s *Service) CreateBlockchain(req *http.Request, args *CreateBlockchainArgs
 	}
 
 	s.vm.ctx.Lock.Lock()
-	defer s.vm.ctx.Lock.Unlock()
 
 	user, err := keystore.NewUserFromKeystore(s.vm.ctx.Keystore, args.Username, args.Password)
 	if err != nil {
@@ -1878,6 +1882,8 @@ func (s *Service) CreateBlockchain(req *http.Request, args *CreateBlockchainArgs
 
 	response.TxID = tx.ID()
 	response.ChangeAddr, err = s.addrManager.FormatLocalAddress(changeAddr)
+
+	s.vm.ctx.Lock.Unlock()
 
 	return utils.Err(
 		err,
@@ -2169,9 +2175,6 @@ func (s *Service) IssueTx(req *http.Request, args *api.FormattedTx, response *ap
 	if err != nil {
 		return fmt.Errorf("couldn't parse tx: %w", err)
 	}
-
-	s.vm.ctx.Lock.Lock()
-	defer s.vm.ctx.Lock.Unlock()
 
 	if err := s.vm.Network.IssueTx(req.Context(), tx); err != nil {
 		return fmt.Errorf("couldn't issue tx: %w", err)
