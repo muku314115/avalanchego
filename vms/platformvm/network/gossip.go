@@ -13,6 +13,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/network/p2p/gossip"
+	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
@@ -53,6 +54,7 @@ func (t txGossipHandler) AppRequest(
 
 func NewVerifierMempool(
 	mempool mempool.Mempool,
+	snowCtx *snow.Context,
 	verifier executor.Manager,
 	bloomMaxItems uint64,
 	bloomFalsePositiveRate float64,
@@ -68,6 +70,7 @@ func NewVerifierMempool(
 
 	return &VerifierMempool{
 		Mempool:                   mempool,
+		snowCtx:                   snowCtx,
 		verifier:                  verifier,
 		bloomFilter:               bloomFilter,
 		bloomMaxFalsePositiveRate: bloomMaxFalsePositiveRate,
@@ -77,6 +80,7 @@ func NewVerifierMempool(
 // VerifierMempool performs verification before adding something to the mempool
 type VerifierMempool struct {
 	mempool.Mempool
+	snowCtx  *snow.Context
 	verifier executor.Manager
 
 	lock                      sync.RWMutex
@@ -85,6 +89,9 @@ type VerifierMempool struct {
 }
 
 func (v *VerifierMempool) Add(tx *Tx) error {
+	v.snowCtx.Lock.Lock()
+	defer v.snowCtx.Lock.Unlock()
+
 	if v.Mempool.Has(tx.ID()) {
 		err := fmt.Errorf("tx %s dropped: %w", tx.ID(), ErrTxPending)
 		v.Mempool.MarkDropped(tx.ID(), err)
