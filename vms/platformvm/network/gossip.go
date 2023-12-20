@@ -5,6 +5,8 @@ package network
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -21,6 +23,8 @@ var (
 	_ gossip.Gossipable      = (*Tx)(nil)
 	_ gossip.Marshaller[*Tx] = (*TxMarshaller)(nil)
 	_ gossip.Set[*Tx]        = (*VerifierMempool)(nil)
+
+	ErrTxPending = errors.New("tx pending")
 )
 
 // txGossipHandler is the handler called when serving gossip messages
@@ -81,6 +85,12 @@ type VerifierMempool struct {
 }
 
 func (v *VerifierMempool) Add(tx *Tx) error {
+	if v.Mempool.Has(tx.ID()) {
+		err := fmt.Errorf("tx %s dropped: %w", tx.ID(), ErrTxPending)
+		v.Mempool.MarkDropped(tx.ID(), err)
+		return err
+	}
+
 	if err := v.verifier.VerifyTx(tx.Tx); err != nil {
 		v.Mempool.MarkDropped(tx.ID(), err)
 		return err

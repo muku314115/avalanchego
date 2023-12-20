@@ -228,7 +228,7 @@ func newEnvironment(t *testing.T) *environment {
 		res.sender,
 		p2pNetwork,
 		validators,
-		gossip.NoOpAccumulator[*txs.Tx]{},
+		gossip.NoOpAccumulator[*network.Tx]{},
 		gossip.NoOpGossiper{},
 		p2p.NoOpHandler{},
 		txGossipHandlerID,
